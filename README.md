@@ -51,7 +51,6 @@
 └── BepInEx/
     └── plugins/
             └── ChillClock.dll
-
 ```
 
 ## 开源协议
