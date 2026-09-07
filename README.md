@@ -19,6 +19,7 @@
 ![alt text](imgs/overview.png)
 ## 它解决什么问题
 <img src="imgs/satone.png" alt="satone" width="300">
+
 ### 主要是解决我老走神的毛病，碰碰这碰碰那啥也没干一天就过去了。
 
 - Chill Clock 会在专注期间自动把**不在白名单里的应用最小化到任务栏**；
