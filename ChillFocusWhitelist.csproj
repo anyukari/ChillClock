@@ -1,0 +1,70 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>ChillClock</AssemblyName>
+    <RootNamespace>ChillFocusWhitelist</RootNamespace>
+    <Nullable>disable</Nullable>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <Deterministic>true</Deterministic>
+    <!-- 本机未装 .NET Framework Reference Assemblies 时，直接使用运行时目录编译 -->
+    <FrameworkPathOverride Condition="'$(FrameworkPathOverride)' == ''">C:\Windows\Microsoft.NET\Framework64\v4.0.30319</FrameworkPathOverride>
+    <AutomaticallyUseReferenceAssemblyPackages>false</AutomaticallyUseReferenceAssemblyPackages>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <GameDir Condition="'$(GameDir)' == ''">E:\SOFT\STEAM\steamapps\common\Chill with You Lo-Fi Story</GameDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="0Harmony" Private="false">
+      <HintPath>libs\0Harmony.dll</HintPath>
+    </Reference>
+    <Reference Include="Assembly-CSharp" Private="false">
+      <HintPath>$(GameDir)\Chill With You_Data\Managed\Assembly-CSharp.dll</HintPath>
+    </Reference>
+    <Reference Include="BepInEx" Private="false">
+      <HintPath>libs\BepInEx.dll</HintPath>
+    </Reference>
+    <Reference Include="netstandard" Private="false">
+      <HintPath>$(GameDir)\Chill With You_Data\Managed\netstandard.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Windows.Forms" Private="false">
+      <HintPath>$(GameDir)\Chill With You_Data\Managed\System.Windows.Forms.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Drawing" Private="false">
+      <HintPath>$(GameDir)\Chill With You_Data\Managed\System.Drawing.dll</HintPath>
+    </Reference>
+    <Reference Include="R3" Private="false">
+      <HintPath>$(GameDir)\Chill With You_Data\Managed\R3.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.TextMeshPro" Private="false">
+      <HintPath>$(GameDir)\Chill With You_Data\Managed\Unity.TextMeshPro.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine" Private="false">
+      <HintPath>$(GameDir)\Chill With You_Data\Managed\UnityEngine.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.AudioModule" Private="false">
+      <HintPath>$(GameDir)\Chill With You_Data\Managed\UnityEngine.AudioModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule" Private="false">
+      <HintPath>$(GameDir)\Chill With You_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule" Private="false">
+      <HintPath>$(GameDir)\Chill With You_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule" Private="false">
+      <HintPath>$(GameDir)\Chill With You_Data\Managed\UnityEngine.TextRenderingModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UI" Private="false">
+      <HintPath>$(GameDir)\Chill With You_Data\Managed\UnityEngine.UI.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule" Private="false">
+      <HintPath>$(GameDir)\Chill With You_Data\Managed\UnityEngine.UIModule.dll</HintPath>
+    </Reference>
+    <Reference Include="VContainer" Private="false">
+      <HintPath>$(GameDir)\Chill With You_Data\Managed\VContainer.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>

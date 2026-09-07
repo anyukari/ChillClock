@@ -1,0 +1,8 @@
+bin/
+obj/
+*.user
+*.suo
+.vs/
+FocusWhitelist.txt
+.chillclock_*.txt
+GameDir.props
