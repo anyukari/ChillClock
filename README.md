@@ -6,7 +6,7 @@
 [![.NET Framework 4.7.2](https://img.shields.io/badge/.NET%20Framework-4.7.2-blue.svg)](https://dotnet.microsoft.com/download/dotnet-framework/net472)
 [![BepInEx](https://img.shields.io/badge/BepInEx-Plugin-green.svg)](https://github.com/BepInEx/BepInEx)
 
-一个用于游戏《放松时光：与你共享Lo-Fi故事》的 BepInEx 插件：在聪音专注时禁止打开白名单以外的应用
+一个用于游戏《放松时光：与你共享Lo-Fi故事》的 BepInEx 插件：**在聪音专注时禁止打开白名单以外的应用**
 
 ---
 
@@ -20,6 +20,7 @@
 ## 它解决什么问题
 <img src="imgs/satone.png" alt="satone" width="300">
 主要是解决我老走神的毛病，碰碰这碰碰那啥也没干一天就过去了。
+
 
 Chill Clock 会在专注期间自动把**不在白名单里的应用最小化到任务栏**：
 
