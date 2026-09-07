@@ -6,7 +6,7 @@
 [![.NET Framework 4.7.2](https://img.shields.io/badge/.NET%20Framework-4.7.2-blue.svg)](https://dotnet.microsoft.com/download/dotnet-framework/net472)
 [![BepInEx](https://img.shields.io/badge/BepInEx-Plugin-green.svg)](https://github.com/BepInEx/BepInEx)
 
-一个用于游戏《放松时光：与你共享Lo-Fi故事》的 BepInEx 插件：在聪音专注时禁止打开白名单以外的应用
+一个用于游戏《放松时光：与你共享Lo-Fi故事》的 BepInEx 插件：**在聪音专注时禁止打开白名单以外的应用**
 
 ---
 
@@ -18,15 +18,15 @@
 
 ![alt text](imgs/overview.png)
 ## 它解决什么问题
-![alt text](imgs/satone.png)
-主要是解决我老走神的毛病，碰碰这碰碰那啥也没干一天就过去了。
+<img src="imgs/satone.png" alt="satone" width="300">
 
-Chill Clock 会在专注期间自动把**不在白名单里的应用最小化到任务栏**：
+### 主要是解决我老走神的毛病，碰碰这碰碰那啥也没干一天就过去了。
 
+- Chill Clock 会在专注期间自动把**不在白名单里的应用最小化到任务栏**；
 - 已经打开的非白名单窗口会被收进任务栏；
 - 即使你从开始菜单或托盘再次打开它们，也会被继续最小化；
-- 白名单里的应用（比如编辑器、浏览器、笔记）不受影响，可以正常使用；
-- 专注结束 / 休息 / 结束通话后，Chill Clock 停止干预，但**不会把窗口全部自动弹回**，你按自己的节奏点开即可。
+- 白名单里的应用不受影响，可以正常使用；
+- 专注结束 / 休息 / 结束通话后，Chill Clock 停止干预。
 
 ## 安装步骤
 
@@ -52,7 +52,6 @@ Chill Clock 会在专注期间自动把**不在白名单里的应用最小化到
 └── BepInEx/
     └── plugins/
             └── ChillClock.dll
-
 ```
 
 ## 开源协议
@@ -67,6 +66,5 @@ Chill Clock 会在专注期间自动把**不在白名单里的应用最小化到
 - 感谢 [BepInEx](https://github.com/BepInEx/BepInEx) 社区
 - 设置页注入思路参考 [iGPU Savior (Potato Mode)](https://github.com/Small-tailqwq/iGPUSaviorMod)
 - 番茄钟挂钩思路参考 [LofiNotify](https://github.com/kanghengliu/lofinotify)
-- 灵感与 UI 参考 [FocusClock](https://github.com/mmmmagic/Clock)
 
 > 本插件仅供学习交流，请勿直接售卖。使用产生的任何问题由使用者自行承担。
