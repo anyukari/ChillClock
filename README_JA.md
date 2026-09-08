@@ -2,34 +2,35 @@
 
 [简体中文](README.md) | [English](README_EN.md) | [日本語](README_JA.md)
 
-*Chill with You : Lo-Fi Story* 向けの BepInEx プラグインです。ゲーム内のポモドーロタイマーを、デスクトップ上の「集中タイマー」として活用できるようにします。
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![.NET Framework 4.7.2](https://img.shields.io/badge/.NET%20Framework-4.7.2-blue.svg)](https://dotnet.microsoft.com/download/dotnet-framework/net472)
+[![BepInEx](https://img.shields.io/badge/BepInEx-Plugin-green.svg)](https://github.com/BepInEx/BepInEx)
 
-『*Chill with You : Lo-Fi Story*』は、物語を書くことが好きな女の子「サトネ」と一緒に作業するオーディオビジュアルノベルです。お気に入りのアーティスト楽曲や環境音、景色を自由にカスタマイズして、作業に集中できる環境を作りましょう。絆を深めていくと、ふたりだけの特別なつながりが見つかるかもしれません。
+*Chill with You : Lo-Fi Story* 向けの BepInEx プラグインです。**サトネが集中している間、ホワイトリスト以外のアプリを開けないようにします。**
 
 ---
 
-## できること
+[![Chill with You](imgs/header_schinese.jpg)](https://store.steampowered.com/app/3548580/)
 
-ゲームでポモドーロの「集中(Focus)」を開始すると、**ホワイトリストにないアプリを自動的にタスクバーへ最小化**します。
+> 『*Chill with You : Lo-Fi Story*』は、物語を書くことが好きな女の子「サトネ」と一緒に作業するオーディオビジュアルノベルです。お気に入りのアーティスト楽曲や環境音、景色を自由にカスタマイズして、作業に集中できる環境を作りましょう。絆を深めていくと、ふたりだけの特別なつながりが見つかるかもしれません。
 
-- 開いているアプリをタスクバーへ最小化
-- スタートメニューやトレイから再度開こうとしても、すぐに最小化し直します
-- ホワイトリスト登録済みアプリ(エディタ・ブラウザ・メモなど)は通常どおり使えます
-- 集中終了 / 休憩 / 通話終了後は介入をやめますが、**ウィンドウを自動で元に戻したりはしません**
+---
 
-## 主な機能
+## デモ
 
-- `PomodoroService` のメソッド・イベントから集中状態を検出
-- 集中中は約 0.2 秒ごとに非ホワイトリスト窓を最小化
-- ゲーム標準の設定画面に「Chill Clock」ページを追加
-- ページ最上部に「Chill Clock を有効化」トグル
-- ホワイトリスト管理:
-  - アプリアイコン付きで一覧表示
-  - ワンタップで削除
-  - 「ファイルから追加」: Windows 標準のファイル選択ダイアログ
-  - 「開いているウィンドウから追加」: 実行中/トレイのアプリを一覧表示して追加
-  - 重複追加時は通知を表示し、選択ページを閉じずに続行
-- ホワイトリストはプラグイン同梱フォルダの `FocusWhitelist.txt` に保存
+![デモ](imgs/overview.png)
+
+## 何が解決できるの?
+
+<img src="imgs/satone.png" alt="satone" width="300">
+
+### 正直なところ、これは自分の集中力のなさを解決するためのプラグインです。あれこれ触って気づいたら一日終わってた、なんて経験ありませんか?
+
+- 集中(Focus)中は、**ホワイトリストにないアプリを自動的にタスクバーへ最小化**します;
+- 開いている非ホワイトリストのウィンドウも最小化されます;
+- スタートメニューやトレイから再度開こうとしても、すぐに最小化し直されます;
+- ホワイトリスト登録済みのアプリは通常どおり使えます;
+- 集中終了 / 休憩 / 通話終了後は、Chill Clock は介入をやめます。
 
 ## インストール
 
@@ -40,60 +41,33 @@
 
 ### 手順
 
-1. BepInEx が導入済みであることを確認します(`BepInEx/plugins/` がある状態)。
-2. ビルドした `ChillClock.dll` を次へ配置:
+1. **BepInEx をインストール**
+   - 上のリンクから BepInEx をダウンロードします。
+   - ゲームのルートフォルダに解凍します。
+   - ゲームを一度起動して、BepInEx 関連フォルダを生成させます(`BepInEx/plugins/` ができていれば OK)。
 
-```text
-BepInEx\plugins\
+2. **Mod をインストール**
+   - Release から最新の `ChillClock.dll` をダウンロードします。
+   - `ChillClock.dll` を `BepInEx/plugins/` に配置します。
+   - フォルダ構成は次のようになります:
+
 ```
-
-3. ゲームを起動し、設定画面から「Chill Clock」タブを開きます。
-4. 初めてアプリを追加すると `FocusWhitelist.txt` が生成されます。
-
-## ホワイトリストの形式
-
-1 行につき 1 アプリ。フルパスまたは exe 名を指定できます:
-
-```text
-C:\Program Files\Google\Chrome\Application\chrome.exe
-notepad.exe
+[ゲームルート]/
+└── BepInEx/
+    └── plugins/
+            └── ChillClock.dll
 ```
-
-`#` から始まる行はコメント、ダブルクォートも利用できます。
-
-## ビルド
-
-[.NET SDK](https://dotnet.microsoft.com/download)(8.0 以上)が必要です。
-
-```powershell
-.\build.ps1
-```
-
-ゲームが別の場所にある場合:
-
-```powershell
-.\build.ps1 -GameDir "ゲームのパス"
-```
-
-出力: `bin\Release\ChillClock.dll`
-
-## 仕組み
-
-- `PomodoroService.StartPomodoro / OnTimerEnd / ResetTimer / CompletePomodoroTimer` をフック
-- `EnumWindows / ShowWindow` で可視トップレベルウィンドウを周期的に走査
-- 非ホワイトリスト窓を最小化(タスクバーアイコンは維持)
-- 集中終了時は制御を解除(ウィンドウは自動復元しない)
-- 設定ページは `SettingUI.Setup / Activate` への Harmony フックで注入
 
 ## ライセンス
 
-[MIT License](LICENSE)。詳細は [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) もご覧ください。
+このプロジェクトは [MIT License](LICENSE) で公開されています。
+
+> 簡単に言うと:個人・商用を問わず自由に利用・改変・再配布できます。ただし著作権表示とライセンス文を残し、利用は自己責任でお願いします。
 
 ## 謝辞
 
-- [BepInEx](https://github.com/BepInEx/BepInEx)
-- UI 注入の参考: [iGPU Savior](https://github.com/Small-tailqwq/iGPUSaviorMod)
+- [BepInEx](https://github.com/BepInEx/BepInEx) コミュニティに感謝します
+- 設定ページ注入の参考: [iGPU Savior (Potato Mode)](https://github.com/Small-tailqwq/iGPUSaviorMod)
 - ポモドーロフックの参考: [LofiNotify](https://github.com/kanghengliu/lofinotify)
-- 発想・UI の参考: [FocusClock](https://github.com/mmmmagic/Clock)、[Chill Music Information Sync](https://github.com/Cainongw/ChillMusicInformationSyncMod)
 
-学習・交流目的でお使いください。自己責任でご利用ください。
+> 学習・交流目的のみ。直接販売はしないでください。利用による問題は自己責任です。
