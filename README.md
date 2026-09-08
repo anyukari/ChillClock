@@ -44,7 +44,7 @@
 
 2. **安装 Mod**
 * 从 Release 下载最新版本的 `ChillClock.dll`。
-* 将编译好的 `ChillClock.dll` 放入`BepInEx/plugins/` 目录下。
+* 将 `ChillClock.dll` 放入`BepInEx/plugins/` 目录下。
 * 确保你的文件夹结构如下所示：
 
 
