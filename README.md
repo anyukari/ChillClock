@@ -55,6 +55,10 @@
             └── ChillClock.dll
 ```
 
+## 关于其他Mod
+
+如果您对此游戏其他Mod感兴趣，可参见：[awesome-chillwithyou](https://github.com/clsty/awesome-chillwithyou)
+
 ## 开源协议
 
 本项目采用 [MIT License](LICENSE)。
