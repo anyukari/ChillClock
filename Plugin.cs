@@ -18,7 +18,7 @@ public sealed class Plugin : BaseUnityPlugin
 {
     public const string Guid = "com.chillclock.plugin";
     public const string Name = "Chill Clock";
-    public const string Version = "0.2.0";
+    public const string Version = "0.3.0";
 
     internal static ManualLogSource Log = null!;
     internal static Plugin Instance = null!;
