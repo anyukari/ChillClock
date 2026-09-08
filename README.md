@@ -70,4 +70,4 @@
 - 设置页注入思路参考 [iGPU Savior (Potato Mode)](https://github.com/Small-tailqwq/iGPUSaviorMod)
 - 番茄钟挂钩思路参考 [LofiNotify](https://github.com/kanghengliu/lofinotify)
 
-> 本插件仅供学习交流，请勿直接售卖。使用产生的任何问题由使用者自行承担。
+> 本插件仅供学习交流，请支持正版游戏。
