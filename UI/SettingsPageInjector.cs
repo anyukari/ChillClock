@@ -86,6 +86,7 @@ internal sealed class SettingsPageInjector
         ForceGeneralDefault();
         ApplyPendingFile();
         HookForeignTabs();
+        RequestRebuild();
     }
 
     public void Tick()
@@ -199,6 +200,7 @@ internal sealed class SettingsPageInjector
         if (_scrollContent == null || _settingUi == null)
             return;
 
+        RefreshUiLanguage();
         ClearChildren(_scrollContent.transform);
 
         _rowWidth = RowWidth;
@@ -211,23 +213,23 @@ internal sealed class SettingsPageInjector
 
         // 1. 总开关固定在页面最顶部。
         AddChild(CreateToggleRow(
-            LocalizedText.Pick("启用 Chill Clock", "Enable Chill Clock"),
+            LocalizedText.Pick("启用 Chill Clock", "Enable Chill Clock", "Chill Clock を有効化"),
             _getMasterEnabled(),
             _setMasterEnabled));
 
         // 2. 添加入口。
         AddChild(CreateActionRow(
-            LocalizedText.Pick("从文件添加应用", "Add app from file"),
-            LocalizedText.Pick("选择程序…", "Choose .exe…"),
+            LocalizedText.Pick("从文件添加应用", "Add App from File", "ファイルからアプリ追加"),
+            LocalizedText.Pick("选择程序", "Choose .exe", "ファイルを選択"),
             PickExecutable));
 
         AddChild(CreateActionRow(
-            LocalizedText.Pick("从当前窗口添加应用", "Add app from open windows"),
-            LocalizedText.Pick("打开窗口列表", "Open window list"),
+            LocalizedText.Pick("从当前窗口添加应用", "Add App from Windows", "ウィンドウからアプリ追加"),
+            LocalizedText.Pick("打开窗口列表", "Window List", "ウィンドウ一覧"),
             OpenWindowPicker));
 
         // 4. 白名单列表区（图标在每一行的左侧）。
-        AddChild(CreateSectionRow(LocalizedText.Pick("白名单应用", "Whitelisted apps")));
+        AddChild(CreateSectionRow(LocalizedText.Pick("白名单应用", "Whitelisted Apps", "ホワイトリスト")));
         AddChild(CreateDividerRow());
 
         foreach (var entry in _store.Entries)
@@ -240,7 +242,7 @@ internal sealed class SettingsPageInjector
         if (_store.Entries.Count == 0)
         {
             AddChild(CreateSectionRow(
-                LocalizedText.Pick("（暂无白名单应用）", "(no whitelisted apps yet)")));
+                LocalizedText.Pick("（暂无白名单应用）", "(No apps yet)", "（ホワイトリストにアプリがありません）")));
         }
 
         ForceLayoutRebuild(_scrollContent);
@@ -271,7 +273,7 @@ internal sealed class SettingsPageInjector
         onButton.gameObject.SetActive(false);
         offButton.onClick.RemoveAllListeners();
         offButton.interactable = true;
-        SetButtonText(offButton, LocalizedText.Pick("删除", "Delete"));
+        SetButtonText(offButton, LocalizedText.Pick("删除", "Delete", "削除"));
         offButton.onClick.AddListener(() =>
         {
             _store.Remove(entry);
@@ -330,22 +332,23 @@ internal sealed class SettingsPageInjector
 
     private void BuildPickerRows()
     {
+        RefreshUiLanguage();
         AddChild(CreateActionRow(
-            LocalizedText.Pick("从当前窗口添加应用", "Add app from open windows"),
-            LocalizedText.Pick("返回设置", "Back to settings"),
+            LocalizedText.Pick("从当前窗口添加应用", "Add App from Windows", "ウィンドウからアプリ追加"),
+            LocalizedText.Pick("返回设置", "Back to Settings", "設定に戻る"),
             HidePicker));
 
         var candidates = WindowCandidates.Enumerate();
         if (candidates.Count == 0)
         {
             AddChild(CreateSectionRow(
-                LocalizedText.Pick("（没有检测到可添加的应用）", "(no apps found)")));
+                LocalizedText.Pick("（没有检测到可添加的应用）", "(No apps found)", "（追加できるアプリが見つかりません）")));
             return;
         }
 
         foreach (var candidate in candidates)
         {
-            var row = CreatePickerActionRow(candidate, LocalizedText.Pick("添加", "Add"), () =>
+            var row = CreatePickerActionRow(candidate, LocalizedText.Pick("添加", "Add", "追加"), () =>
             {
                 if (_store.TryAdd(candidate.Path))
                 {
@@ -356,7 +359,8 @@ internal sealed class SettingsPageInjector
                 {
                     ShowToast(LocalizedText.Pick(
                         "已在白名单中：" + Path.GetFileNameWithoutExtension(candidate.Name),
-                        "Already whitelisted: " + Path.GetFileNameWithoutExtension(candidate.Name)));
+                        "Already whitelisted: " + Path.GetFileNameWithoutExtension(candidate.Name),
+                        "ホワイトリスト登録済み: " + Path.GetFileNameWithoutExtension(candidate.Name)));
                 }
             });
             if (row != null)
@@ -364,6 +368,20 @@ internal sealed class SettingsPageInjector
         }
 
         ForceLayoutRebuild(_scrollContent);
+    }
+
+    private void RefreshUiLanguage()
+    {
+        try
+        {
+            var supplier = ReadField<LanguageSupplier>(_settingUi, "_languageSupplier");
+            if (supplier != null)
+                LocalizedText.SetLanguage(supplier.Get());
+        }
+        catch (Exception e)
+        {
+            Plugin.Log.LogWarning("[Chill Clock] language read failed: " + e.Message);
+        }
     }
 
     private static void ForceVisible(GameObject root)
@@ -388,21 +406,21 @@ internal sealed class SettingsPageInjector
         var candidates = WindowCandidates.Enumerate();
 
         AddPickerChild(CreatePickerActionRow(
-            LocalizedText.Pick("关闭列表", "Close"),
-            LocalizedText.Pick("关闭", "Close"),
+            LocalizedText.Pick("关闭列表", "Close", "リストを閉じる"),
+            LocalizedText.Pick("关闭", "Close", "閉じる"),
             HidePicker));
 
         if (candidates.Count == 0)
         {
             AddPickerChild(CreateSectionRow(
-                LocalizedText.Pick("（没有检测到窗口）", "(no windows detected)")));
+                LocalizedText.Pick("（没有检测到窗口）", "(no windows detected)", "（ウィンドウが見つかりません）")));
             ForceLayoutRebuild(_pickerContent);
             return;
         }
 
         foreach (var candidate in candidates)
         {
-            var row = CreatePickerActionRow(candidate, LocalizedText.Pick("添加", "Add"), () =>
+            var row = CreatePickerActionRow(candidate, LocalizedText.Pick("添加", "Add", "追加"), () =>
             {
                 _store.Add(candidate.Path);
                 HidePicker();
@@ -1034,7 +1052,8 @@ internal sealed class SettingsPageInjector
         {
             ShowToast(LocalizedText.Pick(
                 "已在白名单中：" + Path.GetFileNameWithoutExtension(path),
-                "Already whitelisted: " + Path.GetFileNameWithoutExtension(path)));
+                "Already whitelisted: " + Path.GetFileNameWithoutExtension(path),
+                "ホワイトリスト登録済み: " + Path.GetFileNameWithoutExtension(path)));
         }
     }
 

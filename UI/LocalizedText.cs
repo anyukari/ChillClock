@@ -9,17 +9,23 @@ internal static class LocalizedText
     private static GameLanguageType? _cached;
     private static float _nextLookup;
 
-    public static string Pick(string zh, string en)
+    public static void SetLanguage(GameLanguageType? language)
+    {
+        if (language.HasValue)
+            _cached = language;
+    }
+
+    public static string Pick(string zh, string en, string ja)
     {
         try
         {
-            RefreshLanguageIfNeeded();
+            if (!_cached.HasValue)
+                RefreshLanguageIfNeeded();
+            if (_cached == GameLanguageType.Japanese)
+                return ja;
             if (_cached == GameLanguageType.ChineseSimplified ||
-                _cached == GameLanguageType.ChineseTraditional ||
-                _cached == GameLanguageType.Japanese)
-            {
+                _cached == GameLanguageType.ChineseTraditional)
                 return zh;
-            }
         }
         catch
         {
