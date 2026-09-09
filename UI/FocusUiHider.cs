@@ -22,16 +22,20 @@ internal sealed class FocusUiHider
 
     private bool _hideStopSkip;
     private bool _hideUi;
+    private bool _hideSessionButtons;
     private bool _stateApplied;
     private float _nextApplyTime;
 
-    public void Tick(bool hideStopSkip, bool hideUi)
+    public void Tick(bool hideStopSkip, bool hideUi, bool hideSessionButtons)
     {
-        var changed = hideStopSkip != _hideStopSkip || hideUi != _hideUi;
+        var changed = hideStopSkip != _hideStopSkip ||
+                      hideUi != _hideUi ||
+                      hideSessionButtons != _hideSessionButtons;
         _hideStopSkip = hideStopSkip;
         _hideUi = hideUi;
+        _hideSessionButtons = hideSessionButtons;
 
-        var shouldHide = hideStopSkip || hideUi;
+        var shouldHide = hideStopSkip || hideUi || hideSessionButtons;
         if (changed)
         {
             RestoreAll();
@@ -51,6 +55,8 @@ internal sealed class FocusUiHider
                 HideStopAndSkip();
             if (hideUi)
                 HideRightSideUi();
+            if (hideSessionButtons)
+                HideSessionEscapeButtons();
             _stateApplied = true;
         }
         catch (Exception e)
@@ -178,6 +184,19 @@ internal sealed class FocusUiHider
             "IconSetting_Button",
             "IconExit_Button"
         };
+        foreach (var name in names)
+        {
+            var target = FindActiveByExactName(name);
+            if (target != null)
+                HideTarget(target);
+        }
+    }
+
+    private void HideSessionEscapeButtons()
+    {
+        PruneDeadTargets();
+
+        var names = new[] { "IconSetting_Button", "IconExit_Button" };
         foreach (var name in names)
         {
             var target = FindActiveByExactName(name);

@@ -135,7 +135,10 @@ public sealed class Plugin : BaseUnityPlugin
         _uiHider.Tick(
             _masterEnabled.Value && _pomodoroSessionActive && _disableStopSkip.Value,
             _masterEnabled.Value &&
-            (_focusActive || _pomodoroSessionActive) &&
+            _focusActive &&
+            _hideUiDuringFocus.Value,
+            _masterEnabled.Value &&
+            _pomodoroSessionActive &&
             _hideUiDuringFocus.Value);
         TickCoreHost();
     }
