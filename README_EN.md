@@ -18,7 +18,7 @@ A BepInEx plugin for *Chill with You : Lo-Fi Story*: **when Satone is focusing, 
 
 ## Demo
 
-![Demo](imgs/overview.png)
+![Demo](imgs/overview_en.png)
 
 ## What problem does it solve?
 

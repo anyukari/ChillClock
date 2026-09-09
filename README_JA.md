@@ -18,7 +18,7 @@
 
 ## デモ
 
-![デモ](imgs/overview.png)
+![デモ](imgs/overview_jp.png)
 
 ## 何が解決できるの?
 
