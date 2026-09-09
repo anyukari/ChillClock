@@ -68,10 +68,7 @@ public sealed class Plugin : BaseUnityPlugin
         _guard = new WindowGuard(_store);
         _watcher = new FocusSessionWatcher();
         _uiHider = new FocusUiHider();
-        _closeGuard = new CloseGuard(
-            () => _masterEnabled.Value &&
-                  _blockGameExitOnFocus.Value &&
-                  _focusActive);
+        _closeGuard = new CloseGuard(() => ShouldBlockGameExit());
         _escGuard = new EscKeyGuard();
         Application.wantsToQuit += OnWantsToQuit;
         _ui = new SettingsPageInjector(
@@ -285,14 +282,23 @@ public sealed class Plugin : BaseUnityPlugin
 
         try
         {
-            // 专注、休息、暂停阶段 IsTimerRunning 都为 true；
-            // 整个番茄钟完成后才回到 Idle。
-            return _pomodoroServiceInstance.IsTimerRunning();
+            // 专注、休息、暂停阶段都算会话进行中；
+            // 只有整个番茄钟完成后 CurrentPomodoroType 才变为 Complete。
+            return _pomodoroServiceInstance.IsTimerRunning() ||
+                   _pomodoroServiceInstance.CurrentPomodoroType !=
+                   Bulbul.PomodoroService.PomodoroType.Complete;
         }
         catch
         {
             return false;
         }
+    }
+
+    internal bool ShouldBlockGameExit()
+    {
+        return _masterEnabled.Value &&
+               _blockGameExitOnFocus.Value &&
+               (_focusActive || IsPomodoroSessionActive());
     }
 
     private bool OnWantsToQuit()

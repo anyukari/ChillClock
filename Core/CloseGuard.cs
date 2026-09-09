@@ -1,21 +1,25 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
 namespace ChillFocusWhitelist.Core;
 
 /// <summary>
-/// 通过子类化游戏主窗口，在专注期间拦截 WM_CLOSE（右上角 X、任务栏关闭、Alt+F4）。
+/// 给游戏进程的所有可见顶层窗口挂上关闭消息拦截，
+/// 在专注/休息期间阻止右上角 X、任务栏关闭、Alt+F4 等正常退出。
 /// </summary>
 internal sealed class CloseGuard
 {
     private const int GwlWndProc = -4;
     private const uint WmClose = 0x0010;
+    private const uint WmSyscommand = 0x0112;
+    private const int ScClose = 0xF060;
 
     private readonly Func<bool> _shouldBlock;
+    private readonly Dictionary<IntPtr, IntPtr> _previousProcs = new Dictionary<IntPtr, IntPtr>();
 
-    private IntPtr _hwnd;
-    private IntPtr _previousProc;
     private WindowProcDelegate _procDelegate;
+    private int _nextEnumerateTime;
 
     public CloseGuard(Func<bool> shouldBlock)
     {
@@ -24,104 +28,139 @@ internal sealed class CloseGuard
 
     public void EnsureInstalled()
     {
+        if (_procDelegate == null)
+            _procDelegate = WndProc;
+
+        var now = Environment.TickCount;
+        if (now < _nextEnumerateTime)
+            return;
+        _nextEnumerateTime = now + 300;
+
         try
         {
-            var hwnd = Win32.GetCurrentProcessMainWindow();
-            if (hwnd == IntPtr.Zero)
-                return;
-            if (hwnd == _hwnd && _previousProc != IntPtr.Zero)
-                return;
+            var handles = Win32.EnumerateCurrentProcessVisibleWindowHandles();
+            if (handles.Count == 0)
+            {
+                var fallback = Win32.GetCurrentProcessMainWindow();
+                if (fallback != IntPtr.Zero)
+                    handles.Add(fallback);
+            }
 
-            Uninstall();
-            Install(hwnd);
+            var alive = new HashSet<IntPtr>();
+            foreach (var hwnd in handles)
+            {
+                if (!Win32.IsWindowAlive(hwnd))
+                    continue;
+                alive.Add(hwnd);
+                EnsureWindowInstalled(hwnd);
+            }
+
+            RemoveDeadAndMissing(alive);
         }
-        catch (Exception e)
+        catch
         {
-            Plugin.Log.LogWarning("[Chill Clock] close guard install failed: " + e.Message);
+            // 同步失败不阻塞主流程。
         }
     }
 
     public void Uninstall()
     {
-        if (_hwnd != IntPtr.Zero && _previousProc != IntPtr.Zero)
-        {
-            try
-            {
-                SetWindowLongPtr(_hwnd, GwlWndProc, _previousProc);
-            }
-            catch
-            {
-                // 窗口可能已销毁，忽略。
-            }
-        }
-
-        _hwnd = IntPtr.Zero;
-        _previousProc = IntPtr.Zero;
+        foreach (var hwnd in new List<IntPtr>(_previousProcs.Keys))
+            RestoreWindow(hwnd, remove: true);
         _procDelegate = null;
     }
 
-    private void Install(IntPtr hwnd)
+    private void EnsureWindowInstalled(IntPtr hwnd)
     {
-        _hwnd = hwnd;
-        _procDelegate = WndProc;
-        var result = SetWindowLongPtr(hwnd, GwlWndProc, Marshal.GetFunctionPointerForDelegate(_procDelegate));
+        if (_previousProcs.ContainsKey(hwnd))
+        {
+            var currentProc = GetWindowLongPtr(hwnd, GwlWndProc);
+            var myProc = _procDelegate == null
+                ? IntPtr.Zero
+                : Marshal.GetFunctionPointerForDelegate(_procDelegate);
+            if (currentProc == myProc)
+                return;
+
+            RestoreWindow(hwnd, remove: true);
+        }
+
+        var result = SetWindowLongPtr(
+            hwnd,
+            GwlWndProc,
+            Marshal.GetFunctionPointerForDelegate(_procDelegate));
         if (result == IntPtr.Zero)
         {
             var error = Marshal.GetLastWin32Error();
             if (error != 0)
-            {
-                _hwnd = IntPtr.Zero;
-                _previousProc = IntPtr.Zero;
-                _procDelegate = null;
-                Plugin.Log.LogWarning("[Chill Clock] close guard SetWindowLongPtr failed, error=" + error);
                 return;
-            }
         }
 
-        _previousProc = result;
-        Plugin.Log.LogInfo("[Chill Clock] close guard installed on " + hwnd);
+        _previousProcs[hwnd] = result;
+    }
+
+    private void RemoveDeadAndMissing(HashSet<IntPtr> alive)
+    {
+        foreach (var hwnd in new List<IntPtr>(_previousProcs.Keys))
+        {
+            if (!alive.Contains(hwnd))
+                RestoreWindow(hwnd, remove: true);
+        }
+    }
+
+    private void RestoreWindow(IntPtr hwnd, bool remove)
+    {
+        if (!_previousProcs.TryGetValue(hwnd, out var previous))
+            return;
+
+        try
+        {
+            var currentProc = GetWindowLongPtr(hwnd, GwlWndProc);
+            var myProc = _procDelegate == null
+                ? IntPtr.Zero
+                : Marshal.GetFunctionPointerForDelegate(_procDelegate);
+            if (currentProc == myProc)
+                SetWindowLongPtr(hwnd, GwlWndProc, previous);
+        }
+        catch
+        {
+            // 窗口可能已销毁。
+        }
+
+        if (remove)
+            _previousProcs.Remove(hwnd);
     }
 
     private IntPtr WndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
     {
         try
         {
-            if (msg == WmClose)
+            if (msg == WmClose || (msg == WmSyscommand && (wParam.ToInt32() & 0xFFF0) == ScClose))
             {
                 var block = _shouldBlock != null && _shouldBlock();
                 if (block)
-                {
-                    Plugin.Log.LogWarning("[Chill Clock] 专注中已拦截 WM_CLOSE 关闭请求");
                     return IntPtr.Zero;
-                }
 
-                // 非专注时允许关闭：先摘掉子类再转发，避免干扰 Unity 自己的退出流程。
-                return PassCloseToOriginal(hwnd, wParam, lParam);
+                if (msg == WmClose)
+                    return PassCloseToOriginal(hwnd, wParam, lParam);
             }
         }
         catch
         {
-            // 回调异常时放行，避免把游戏窗口卡死。
+            // 回调异常时放行。
         }
 
-        return _previousProc == IntPtr.Zero
-            ? IntPtr.Zero
-            : CallWindowProc(_previousProc, hwnd, msg, wParam, lParam);
+        return _previousProcs.TryGetValue(hwnd, out var previous)
+            ? CallWindowProc(previous, hwnd, msg, wParam, lParam)
+            : IntPtr.Zero;
     }
 
     private IntPtr PassCloseToOriginal(IntPtr hwnd, IntPtr wParam, IntPtr lParam)
     {
-        var previous = _previousProc;
-        if (previous == IntPtr.Zero)
+        if (!_previousProcs.TryGetValue(hwnd, out var previous))
             return IntPtr.Zero;
 
-        SetWindowLongPtr(hwnd, GwlWndProc, previous);
-        _hwnd = IntPtr.Zero;
-        _previousProc = IntPtr.Zero;
-
-        var result = CallWindowProc(previous, hwnd, WmClose, wParam, lParam);
-        _procDelegate = null;
-        return result;
+        RestoreWindow(hwnd, remove: true);
+        return CallWindowProc(previous, hwnd, WmClose, wParam, lParam);
     }
 
     [UnmanagedFunctionPointer(CallingConvention.Winapi)]
@@ -141,10 +180,23 @@ internal sealed class CloseGuard
     [DllImport("user32.dll", EntryPoint = "SetWindowLongW")]
     private static extern IntPtr SetWindowLong32(IntPtr hwnd, int index, IntPtr newValue);
 
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    private static extern IntPtr GetWindowLongPtr64(IntPtr hwnd, int index);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
+    private static extern IntPtr GetWindowLong32(IntPtr hwnd, int index);
+
     private static IntPtr SetWindowLongPtr(IntPtr hwnd, int index, IntPtr newValue)
     {
         return IntPtr.Size == 8
             ? SetWindowLongPtr64(hwnd, index, newValue)
             : SetWindowLong32(hwnd, index, newValue);
+    }
+
+    private static IntPtr GetWindowLongPtr(IntPtr hwnd, int index)
+    {
+        return IntPtr.Size == 8
+            ? GetWindowLongPtr64(hwnd, index)
+            : GetWindowLong32(hwnd, index);
     }
 }

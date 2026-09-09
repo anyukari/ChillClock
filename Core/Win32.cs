@@ -193,6 +193,11 @@ internal static class Win32
         return _cachedMainWindow;
     }
 
+    public static void ResetCachedMainWindow()
+    {
+        _cachedMainWindow = IntPtr.Zero;
+    }
+
     public static bool IsTopmost(IntPtr hWnd)
     {
         var style = GetWindowLong(hWnd, GwlExstyle);
@@ -219,6 +224,22 @@ internal static class Win32
     public static List<WindowInfo> EnumerateAllTopLevelWindowsForPicker()
     {
         return EnumerateWindows(false, true);
+    }
+
+    public static List<IntPtr> EnumerateCurrentProcessVisibleWindowHandles()
+    {
+        var collector = new HandleCollector();
+        EnumWindows(collector.OnWindow, IntPtr.Zero);
+
+        var result = new List<IntPtr>(collector.Handles.Count);
+        foreach (var handle in collector.Handles)
+        {
+            GetWindowThreadProcessId(handle, out var pid);
+            if (pid == (uint)CurrentProcessId && IsWindowVisible(handle))
+                result.Add(handle);
+        }
+
+        return result;
     }
 
     private static List<WindowInfo> EnumerateWindows(bool onlyVisible, bool includeToolWindows)

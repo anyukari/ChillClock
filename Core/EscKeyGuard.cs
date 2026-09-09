@@ -37,10 +37,6 @@ internal sealed class EscKeyGuard
                 Plugin.Log.LogWarning("[Chill Clock] ESC keyboard hook failed, error=" +
                                       Marshal.GetLastWin32Error());
             }
-            else
-            {
-                Plugin.Log.LogInfo("[Chill Clock] ESC keyboard hook installed");
-            }
         }
         catch (Exception e)
         {
