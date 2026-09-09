@@ -37,8 +37,9 @@ internal static class FocusWhitelistActivatePatch
 
 internal static class PomodoroStartPatch
 {
-    private static void Prefix()
+    private static void Prefix(Bulbul.PomodoroService __instance)
     {
+        Plugin.Instance?.AttachPomodoroService(__instance);
         Plugin.Instance?.SetPomodoroSessionActive(true);
         Plugin.Instance?.SetFocusFromEvent(true);
     }
@@ -50,6 +51,7 @@ internal static class PomodoroTimerEndPatch
     {
         if (__instance == null)
             return;
+        Plugin.Instance?.AttachPomodoroService(__instance);
         try
         {
             var type = __instance.CurrentPomodoroType;
@@ -66,8 +68,9 @@ internal static class PomodoroTimerEndPatch
 
 internal static class PomodoroResetPatch
 {
-    private static void Prefix()
+    private static void Prefix(Bulbul.PomodoroService __instance)
     {
+        Plugin.Instance?.AttachPomodoroService(__instance);
         Plugin.Instance?.SetPomodoroSessionActive(false);
         Plugin.Instance?.SetFocusFromEvent(false);
     }
@@ -75,8 +78,9 @@ internal static class PomodoroResetPatch
 
 internal static class PomodoroCompletePatch
 {
-    private static void Postfix()
+    private static void Postfix(Bulbul.PomodoroService __instance)
     {
+        Plugin.Instance?.AttachPomodoroService(__instance);
         Plugin.Instance?.SetPomodoroSessionActive(false);
         Plugin.Instance?.SetFocusFromEvent(false);
     }

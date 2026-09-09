@@ -37,6 +37,7 @@ public sealed class Plugin : BaseUnityPlugin
 
     private bool _focusActive;
     private bool _pomodoroSessionActive;
+    private Bulbul.PomodoroService _pomodoroServiceInstance;
     private Harmony _harmony = null!;
     private bool _loggedServiceMissing;
     private bool _subscribed;
@@ -133,12 +134,12 @@ public sealed class Plugin : BaseUnityPlugin
         _escGuard?.EnsureInstalled();
         _ui.Tick();
         _uiHider.Tick(
-            _masterEnabled.Value && _pomodoroSessionActive && _disableStopSkip.Value,
+            _masterEnabled.Value && IsPomodoroSessionActive() && _disableStopSkip.Value,
             _masterEnabled.Value &&
             _focusActive &&
             _hideUiDuringFocus.Value,
             _masterEnabled.Value &&
-            _pomodoroSessionActive &&
+            IsPomodoroSessionActive() &&
             _hideUiDuringFocus.Value);
         TickCoreHost();
     }
@@ -150,7 +151,7 @@ public sealed class Plugin : BaseUnityPlugin
 
         var shouldGuard = _masterEnabled.Value &&
                           _blockGameExitOnFocus.Value &&
-                          (_focusActive || _pomodoroSessionActive);
+                          (_focusActive || IsPomodoroSessionActive());
         if (shouldGuard)
             _closeGuard.EnsureInstalled();
         else
@@ -270,11 +271,35 @@ public sealed class Plugin : BaseUnityPlugin
         _pomodoroSessionActive = active;
     }
 
+    internal void AttachPomodoroService(Bulbul.PomodoroService service)
+    {
+        _pomodoroServiceInstance = service;
+    }
+
+    internal bool IsPomodoroSessionActive()
+    {
+        if (_pomodoroSessionActive)
+            return true;
+        if (_pomodoroServiceInstance == null)
+            return false;
+
+        try
+        {
+            // 专注、休息、暂停阶段 IsTimerRunning 都为 true；
+            // 整个番茄钟完成后才回到 Idle。
+            return _pomodoroServiceInstance.IsTimerRunning();
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private bool OnWantsToQuit()
     {
         if (!_masterEnabled.Value || !_blockGameExitOnFocus.Value)
             return true;
-        if (!_focusActive && !_pomodoroSessionActive)
+        if (!_focusActive && !IsPomodoroSessionActive())
             return true;
 
         Logger.LogWarning("[Chill Clock] 番茄钟会话中已拦截退出请求");
@@ -286,6 +311,7 @@ public sealed class Plugin : BaseUnityPlugin
         Application.wantsToQuit -= OnWantsToQuit;
         _closeGuard?.Uninstall();
         _escGuard?.Uninstall();
+        _pomodoroServiceInstance = null;
         _uiHider?.RestoreAll();
         _guard?.ReleaseAll();
     }
