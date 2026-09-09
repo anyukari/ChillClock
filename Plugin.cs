@@ -72,6 +72,7 @@ public sealed class Plugin : BaseUnityPlugin
                   _blockGameExitOnFocus.Value &&
                   _focusActive);
         _escGuard = new EscKeyGuard();
+        Application.wantsToQuit += OnWantsToQuit;
         _ui = new SettingsPageInjector(
             _store,
             () => _masterEnabled.Value,
@@ -133,7 +134,9 @@ public sealed class Plugin : BaseUnityPlugin
         _ui.Tick();
         _uiHider.Tick(
             _masterEnabled.Value && _pomodoroSessionActive && _disableStopSkip.Value,
-            _masterEnabled.Value && _focusActive && _hideUiDuringFocus.Value);
+            _masterEnabled.Value &&
+            (_focusActive || _pomodoroSessionActive) &&
+            _hideUiDuringFocus.Value);
         TickCoreHost();
     }
 
@@ -144,7 +147,7 @@ public sealed class Plugin : BaseUnityPlugin
 
         var shouldGuard = _masterEnabled.Value &&
                           _blockGameExitOnFocus.Value &&
-                          _focusActive;
+                          (_focusActive || _pomodoroSessionActive);
         if (shouldGuard)
             _closeGuard.EnsureInstalled();
         else
@@ -264,8 +267,20 @@ public sealed class Plugin : BaseUnityPlugin
         _pomodoroSessionActive = active;
     }
 
+    private bool OnWantsToQuit()
+    {
+        if (!_masterEnabled.Value || !_blockGameExitOnFocus.Value)
+            return true;
+        if (!_focusActive && !_pomodoroSessionActive)
+            return true;
+
+        Logger.LogWarning("[Chill Clock] 番茄钟会话中已拦截退出请求");
+        return false;
+    }
+
     private void OnDestroy()
     {
+        Application.wantsToQuit -= OnWantsToQuit;
         _closeGuard?.Uninstall();
         _escGuard?.Uninstall();
         _uiHider?.RestoreAll();
