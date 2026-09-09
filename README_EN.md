@@ -31,6 +31,9 @@ A BepInEx plugin for *Chill with You : Lo-Fi Story*: **when Satone is focusing, 
 - Even if you open them again from the Start menu or system tray, they get minimized again;
 - Whitelisted apps keep working normally;
 - After focus ends / a break starts / you hang up the call, Chill Clock stops interfering.
+- Works with both **Pomodoro** and **Count-up** timer modes;
+- Settings include "Disable End/Skip in Focus", "Hide Side UI in Focus" and "Block Game Exit in Focus";
+- The settings UI is localized in Simplified Chinese / English / Japanese.
 
 ## Installation
 
