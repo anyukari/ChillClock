@@ -22,6 +22,12 @@ internal sealed class SettingsPageInjector
     private readonly WhitelistStore _store;
     private readonly Func<bool> _getMasterEnabled;
     private readonly Action<bool> _setMasterEnabled;
+    private readonly Func<bool> _getDisableStopSkip;
+    private readonly Action<bool> _setDisableStopSkip;
+    private readonly Func<bool> _getHideUiDuringFocus;
+    private readonly Action<bool> _setHideUiDuringFocus;
+    private readonly Func<bool> _getBlockGameExitOnFocus;
+    private readonly Action<bool> _setBlockGameExitOnFocus;
 
     private SettingUI _settingUi;
     private bool _pageBuilt;
@@ -47,11 +53,23 @@ internal sealed class SettingsPageInjector
     public SettingsPageInjector(
         WhitelistStore store,
         Func<bool> getMasterEnabled,
-        Action<bool> setMasterEnabled)
+        Action<bool> setMasterEnabled,
+        Func<bool> getDisableStopSkip,
+        Action<bool> setDisableStopSkip,
+        Func<bool> getHideUiDuringFocus,
+        Action<bool> setHideUiDuringFocus,
+        Func<bool> getBlockGameExitOnFocus,
+        Action<bool> setBlockGameExitOnFocus)
     {
         _store = store;
         _getMasterEnabled = getMasterEnabled;
         _setMasterEnabled = setMasterEnabled;
+        _getDisableStopSkip = getDisableStopSkip;
+        _setDisableStopSkip = setDisableStopSkip;
+        _getHideUiDuringFocus = getHideUiDuringFocus;
+        _setHideUiDuringFocus = setHideUiDuringFocus;
+        _getBlockGameExitOnFocus = getBlockGameExitOnFocus;
+        _setBlockGameExitOnFocus = setBlockGameExitOnFocus;
         Active = this;
     }
 
@@ -217,7 +235,25 @@ internal sealed class SettingsPageInjector
             _getMasterEnabled(),
             _setMasterEnabled));
 
-        // 2. 添加入口。
+        // 2. 专注时隐藏番茄钟控制按钮。
+        AddChild(CreateToggleRow(
+            LocalizedText.Pick("专注时禁止结束/跳过", "Disable End/Skip in Focus", "集中中は終了/スキップ禁止"),
+            _getDisableStopSkip(),
+            _setDisableStopSkip));
+
+        // 3. 专注时隐藏主界面右侧 UI。
+        AddChild(CreateToggleRow(
+            LocalizedText.Pick("专注时隐藏 UI", "Hide Side UI in Focus", "集中中は右側 UI を隠す"),
+            _getHideUiDuringFocus(),
+            _setHideUiDuringFocus));
+
+        // 4. 专注时禁止关闭游戏。
+        AddChild(CreateToggleRow(
+            LocalizedText.Pick("专注时禁止关闭游戏", "Block Game Exit in Focus", "集中中はゲーム終了禁止"),
+            _getBlockGameExitOnFocus(),
+            _setBlockGameExitOnFocus));
+
+        // 5. 添加入口。
         AddChild(CreateActionRow(
             LocalizedText.Pick("从文件添加应用", "Add App from File", "ファイルからアプリ追加"),
             LocalizedText.Pick("选择程序", "Choose .exe", "ファイルを選択"),
@@ -228,7 +264,7 @@ internal sealed class SettingsPageInjector
             LocalizedText.Pick("打开窗口列表", "Window List", "ウィンドウ一覧"),
             OpenWindowPicker));
 
-        // 4. 白名单列表区（图标在每一行的左侧）。
+        // 6. 白名单列表区（图标在每一行的左侧）。
         AddChild(CreateSectionRow(LocalizedText.Pick("白名单应用", "Whitelisted Apps", "ホワイトリスト")));
         AddChild(CreateDividerRow());
 

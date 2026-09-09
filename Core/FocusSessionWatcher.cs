@@ -18,26 +18,8 @@ public sealed class FocusSessionWatcher
     {
         active = false;
 
-        if (_service == null)
-        {
-            var now = Environment.TickCount;
-            if (now < _nextAttemptTime)
-                return false;
-
-            _nextAttemptTime = now + 1000;
-            try
-            {
-                _service = ProjectLifetimeScope.Resolve<PomodoroService>();
-            }
-            catch
-            {
-                // 场景尚未完成 DI 初始化，稍后重试。
-                return false;
-            }
-
-            if (_service == null)
-                return false;
-        }
+        if (!TryResolveService())
+            return false;
 
         try
         {
@@ -53,4 +35,28 @@ public sealed class FocusSessionWatcher
             return false;
         }
     }
+
+    private bool TryResolveService()
+    {
+        if (_service != null)
+            return true;
+
+        var now = Environment.TickCount;
+        if (now < _nextAttemptTime)
+            return false;
+
+        _nextAttemptTime = now + 1000;
+        try
+        {
+            _service = ProjectLifetimeScope.Resolve<PomodoroService>();
+        }
+        catch
+        {
+            // 场景尚未完成 DI 初始化，稍后重试。
+            return false;
+        }
+
+        return _service != null;
+    }
+
 }

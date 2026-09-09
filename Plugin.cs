@@ -18,20 +18,26 @@ public sealed class Plugin : BaseUnityPlugin
 {
     public const string Guid = "com.chillclock.plugin";
     public const string Name = "Chill Clock";
-    public const string Version = "0.3.0";
+    public const string Version = "0.4.0";
 
     internal static ManualLogSource Log = null!;
     internal static Plugin Instance = null!;
 
     private ConfigEntry<bool> _masterEnabled = null!;
+    private ConfigEntry<bool> _disableStopSkip = null!;
+    private ConfigEntry<bool> _hideUiDuringFocus = null!;
+    private ConfigEntry<bool> _blockGameExitOnFocus = null!;
     private WhitelistStore _store = null!;
     private WindowGuard _guard = null!;
     private FocusSessionWatcher _watcher = null!;
     private SettingsPageInjector _ui = null!;
+    private FocusUiHider _uiHider = null!;
+    private CloseGuard _closeGuard = null!;
+    private EscKeyGuard _escGuard = null!;
 
     private bool _focusActive;
+    private bool _pomodoroSessionActive;
     private Harmony _harmony = null!;
-    private bool _loggedUpdate;
     private bool _loggedServiceMissing;
     private bool _subscribed;
     private CompositeDisposable _subscriptions;
@@ -44,6 +50,15 @@ public sealed class Plugin : BaseUnityPlugin
         Instance = this;
 
         _masterEnabled = Config.Bind("General", "Enabled", true, "总开关：是否启用专注白名单功能。");
+        _disableStopSkip = Config.Bind(
+            "Focus", "DisableStopSkip", true,
+            "专注/休息期间是否隐藏番茄钟的停止与跳过按钮。");
+        _hideUiDuringFocus = Config.Bind(
+            "Focus", "HideUiDuringFocus", false,
+            "专注期间是否隐藏主界面右侧按钮列和等级图标。");
+        _blockGameExitOnFocus = Config.Bind(
+            "Focus", "BlockGameExitOnFocus", false,
+            "专注期间是否拦截右上角 X / 任务栏关闭等正常退出操作。");
 
         var pluginDirectory = Path.GetDirectoryName(typeof(Plugin).Assembly.Location);
         var whitelistPath = Path.Combine(pluginDirectory ?? ".", "FocusWhitelist.txt");
@@ -51,10 +66,22 @@ public sealed class Plugin : BaseUnityPlugin
         _store = new WhitelistStore(whitelistPath);
         _guard = new WindowGuard(_store);
         _watcher = new FocusSessionWatcher();
+        _uiHider = new FocusUiHider();
+        _closeGuard = new CloseGuard(
+            () => _masterEnabled.Value &&
+                  _blockGameExitOnFocus.Value &&
+                  _focusActive);
+        _escGuard = new EscKeyGuard();
         _ui = new SettingsPageInjector(
             _store,
             () => _masterEnabled.Value,
-            value => SetConfigValue(_masterEnabled, value));
+            value => SetConfigValue(_masterEnabled, value),
+            () => _disableStopSkip.Value,
+            value => SetConfigValue(_disableStopSkip, value),
+            () => _hideUiDuringFocus.Value,
+            value => SetConfigValue(_hideUiDuringFocus, value),
+            () => _blockGameExitOnFocus.Value,
+            value => SetConfigValue(_blockGameExitOnFocus, value));
 
         var hostObject = new GameObject("ChillClockHost");
         hostObject.hideFlags = HideFlags.HideAndDontSave;
@@ -80,6 +107,12 @@ public sealed class Plugin : BaseUnityPlugin
             PatchPomodoro(pomodoro, "ResetTimer", "PomodoroResetPatch", true);
             PatchPomodoro(pomodoro, "CompletePomodoroTimer", "PomodoroCompletePatch", false);
 
+            var countup = typeof(Bulbul.CountupService);
+            PatchCountup(countup, "StartCountup", "CountupStartPatch", true);
+            PatchCountup(countup, "PlayOrPauseCountupTimer", "CountupTogglePatch", true);
+            PatchCountup(countup, "ResetTimer", "CountupResetPatch", true);
+            PatchCountup(countup, "CompleteCountupTimer", "CountupCompletePatch", false);
+
             var patched = _harmony.GetPatchedMethods()
                 .Select(m => m.DeclaringType?.Name + "." + m.Name)
                 .ToList();
@@ -93,26 +126,29 @@ public sealed class Plugin : BaseUnityPlugin
         Logger.LogInfo(Name + " v" + Version + " loaded. Whitelist: " + whitelistPath);
     }
 
-    private void Update()
-    {
-        try
-        {
-            if (!_loggedUpdate)
-            {
-                _loggedUpdate = true;
-                Logger.LogInfo("[Chill Clock] Plugin Update is running.");
-            }
-        }
-        catch (Exception e)
-        {
-            Logger.LogWarning("[Chill Clock] Update failed: " + e);
-        }
-    }
-
     internal void TickHost()
     {
+        UpdateCloseGuard();
+        _escGuard?.EnsureInstalled();
         _ui.Tick();
+        _uiHider.Tick(
+            _masterEnabled.Value && _pomodoroSessionActive && _disableStopSkip.Value,
+            _masterEnabled.Value && _focusActive && _hideUiDuringFocus.Value);
         TickCoreHost();
+    }
+
+    private void UpdateCloseGuard()
+    {
+        if (_closeGuard == null)
+            return;
+
+        var shouldGuard = _masterEnabled.Value &&
+                          _blockGameExitOnFocus.Value &&
+                          _focusActive;
+        if (shouldGuard)
+            _closeGuard.EnsureInstalled();
+        else
+            _closeGuard.Uninstall();
     }
 
     private void TickCoreHost()
@@ -164,8 +200,8 @@ public sealed class Plugin : BaseUnityPlugin
             // 避免游戏失焦自动暂停时误放行非白名单窗口。
             if (workActive && !_focusActive)
             {
-                _focusActive = workActive;
-                _guard.SetFocusActive(workActive);
+                _focusActive = true;
+                _guard.SetFocusActive(true);
                 Logger.LogInfo("[Chill Clock] focus state -> Work active (poll)");
             }
         }
@@ -185,10 +221,22 @@ public sealed class Plugin : BaseUnityPlugin
             _subscriptions = new CompositeDisposable();
             var service = _watcher.Service;
 
-            service.OnStartWork.Subscribe(_ => SetFocusFromEvent(true)).AddTo(_subscriptions);
-            service.OnStartBreak.Subscribe(_ => SetFocusFromEvent(false)).AddTo(_subscriptions);
+            service.OnStartWork.Subscribe(_ =>
+            {
+                _pomodoroSessionActive = true;
+                SetFocusFromEvent(true);
+            }).AddTo(_subscriptions);
+            service.OnStartBreak.Subscribe(_ =>
+            {
+                _pomodoroSessionActive = true;
+                SetFocusFromEvent(false);
+            }).AddTo(_subscriptions);
             service.OnUnpause.Subscribe(type => SetFocusFromEvent(type == Bulbul.PomodoroService.PomodoroType.Work)).AddTo(_subscriptions);
-            service.OnCompletePomodoro.Subscribe(_ => SetFocusFromEvent(false)).AddTo(_subscriptions);
+            service.OnCompletePomodoro.Subscribe(_ =>
+            {
+                _pomodoroSessionActive = false;
+                SetFocusFromEvent(false);
+            }).AddTo(_subscriptions);
             _subscribed = true;
             Logger.LogInfo("[Chill Clock] subscribed to PomodoroService events");
         }
@@ -211,8 +259,16 @@ public sealed class Plugin : BaseUnityPlugin
         Logger.LogInfo("[Chill Clock] event focus state -> " + (active ? "Work active" : "ended"));
     }
 
+    internal void SetPomodoroSessionActive(bool active)
+    {
+        _pomodoroSessionActive = active;
+    }
+
     private void OnDestroy()
     {
+        _closeGuard?.Uninstall();
+        _escGuard?.Uninstall();
+        _uiHider?.RestoreAll();
         _guard?.ReleaseAll();
     }
 
@@ -229,6 +285,17 @@ public sealed class Plugin : BaseUnityPlugin
     {
         var original = AccessTools.Method(type, methodName);
         Logger.LogInfo("Pomodoro patch " + methodName + " -> " + (original != null));
+        if (original != null)
+        {
+            var patch = PatchMethod(patchTypeName, isPrefix ? "Prefix" : "Postfix");
+            _harmony.Patch(original, prefix: isPrefix ? patch : null, postfix: isPrefix ? null : patch);
+        }
+    }
+
+    private void PatchCountup(Type type, string methodName, string patchTypeName, bool isPrefix)
+    {
+        var original = AccessTools.Method(type, methodName);
+        Logger.LogInfo("Countup patch " + methodName + " -> " + (original != null));
         if (original != null)
         {
             var patch = PatchMethod(patchTypeName, isPrefix ? "Prefix" : "Postfix");

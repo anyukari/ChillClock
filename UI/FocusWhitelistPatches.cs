@@ -39,6 +39,7 @@ internal static class PomodoroStartPatch
 {
     private static void Prefix()
     {
+        Plugin.Instance?.SetPomodoroSessionActive(true);
         Plugin.Instance?.SetFocusFromEvent(true);
     }
 }
@@ -67,11 +68,58 @@ internal static class PomodoroResetPatch
 {
     private static void Prefix()
     {
+        Plugin.Instance?.SetPomodoroSessionActive(false);
         Plugin.Instance?.SetFocusFromEvent(false);
     }
 }
 
 internal static class PomodoroCompletePatch
+{
+    private static void Postfix()
+    {
+        Plugin.Instance?.SetPomodoroSessionActive(false);
+        Plugin.Instance?.SetFocusFromEvent(false);
+    }
+}
+
+internal static class CountupStartPatch
+{
+    private static void Prefix()
+    {
+        Plugin.Instance?.SetFocusFromEvent(true);
+    }
+}
+
+internal static class CountupTogglePatch
+{
+    private static void Prefix(Bulbul.CountupService __instance)
+    {
+        if (__instance == null)
+            return;
+
+        try
+        {
+            // 正计时暂停会切到 Break 状态；恢复则回到 Work。
+            if (__instance.IsCurrentWorking())
+                Plugin.Instance?.SetFocusFromEvent(false);
+            else
+                Plugin.Instance?.SetFocusFromEvent(true);
+        }
+        catch
+        {
+        }
+    }
+}
+
+internal static class CountupResetPatch
+{
+    private static void Prefix()
+    {
+        Plugin.Instance?.SetFocusFromEvent(false);
+    }
+}
+
+internal static class CountupCompletePatch
 {
     private static void Postfix()
     {
@@ -89,15 +137,8 @@ internal sealed class FocusUiDriver : UnityEngine.MonoBehaviour
 
 internal sealed class FocusHostBehaviour : UnityEngine.MonoBehaviour
 {
-    private float _nextLog;
-
     private void Update()
     {
         Plugin.Instance?.TickHost();
-
-        if (UnityEngine.Time.realtimeSinceStartup < _nextLog)
-            return;
-        _nextLog = UnityEngine.Time.realtimeSinceStartup + 3f;
-        Plugin.Log?.LogInfo("[FocusWhitelist Host] alive");
     }
 }
