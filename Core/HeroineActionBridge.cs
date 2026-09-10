@@ -163,6 +163,14 @@ internal static class HeroineActionBridge
         if (InvokeServiceFlag("IsSleeping"))
             return true;
 
+        // 她自己在做"野生动作"（伸懒腰、开窗关窗、喝茶、想事情…）时也算忙：
+        // ActionStateType 4-10 = WildStretchFullBody / StretchShoulder / Tea / Guts /
+        // Memorie / OpenWindow / CloseWindow。这时候去改她的动作会打断她，
+        // 日志里就抓到过"她在开窗、我们却给她切了个说话手势"。
+        var actionState = GetActionState();
+        if (actionState >= 4 && actionState <= 10)
+            return true;
+
         return false;
     }
 
