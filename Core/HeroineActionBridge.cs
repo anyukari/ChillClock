@@ -500,7 +500,17 @@ internal static class HeroineActionBridge
             var before = CurrentAnimationName();
             try
             {
-                _changeAnimation.Invoke(_service, new object[] { id });
+                // 置位探针标记，别把我们自己的调用记成"游戏下发的动作"
+                UI.HeroineMotionProbePatch.Ours = true;
+                try
+                {
+                    _changeAnimation.Invoke(_service, new object[] { id });
+                }
+                finally
+                {
+                    UI.HeroineMotionProbePatch.Ours = false;
+                }
+
                 Plugin.Log.LogInfo("[Chill Clock] action: " + (emotion ?? "") +
                                    " -> " + AnimationName(id) + "(" + id + ")" +
                                    " state=" + ActionStateName(GetActionState()) +

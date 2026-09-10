@@ -36,6 +36,46 @@ internal static class FocusWhitelistActivatePatch
 }
 
 /// <summary>
+/// 只读诊断（服务层）：不管游戏从哪条剧情指令下发，最后都会落到
+/// HeroineService 这几个方法上：
+///   ChangeHeroineAnimationForInteger 身体动作（-1 = 不改，保持手头的活）
+///   ChangeHeroineFacialAnimation     表情
+///   ChangeLookScaleAnimation         转头（scale / speed / ease）
+///   ChangeHeroineAnimationImmediately 直接点名播某个动作
+/// 把它们的参数记下来，就是游戏自己的那套值，我们照着对齐。
+///
+/// 我们自己在调的时候会置 Ours，免得把自己的调用也记进去。只记日志，不改行为。
+/// </summary>
+internal static class HeroineMotionProbePatch
+{
+    /// <summary>我们自己在调这些方法时置位。</summary>
+    internal static bool Ours;
+
+    private static void Body(object[] __args) => Log("body", __args);
+    private static void Facial(object[] __args) => Log("facial", __args);
+    private static void Look(object[] __args) => Log("look(scale/speed/ease)", __args);
+    private static void Immediate(object[] __args) => Log("immediate", __args);
+
+    private static void Log(string what, object[] args)
+    {
+        if (Ours)
+            return;
+
+        try
+        {
+            var text = args == null || args.Length == 0
+                ? "?"
+                : string.Join("/", System.Array.ConvertAll(args, a => a?.ToString() ?? "null"));
+            Plugin.Log.LogInfo("[Chill Clock] game motion: " + what + " = " + text);
+        }
+        catch
+        {
+            // 诊断用，出错就算了
+        }
+    }
+}
+
+/// <summary>
 /// 只读诊断：游戏自己在播剧情 / 点击反应时，会通过
 /// ScenarioReader.CommandChangeMotion 一次下发三件事 ——
 /// 身体动作(-1 = 不改)、表情、转头幅度。把这三个值记下来，

@@ -164,6 +164,13 @@ public sealed class Plugin : BaseUnityPlugin
             if (changeMotion != null)
                 _harmony.Patch(changeMotion, postfix: PatchMethod("ScenarioMotionProbePatch", "Postfix"));
 
+            // 服务层探针：她自己的动作/表情/转头入口
+            var heroineService = AccessTools.TypeByName("Bulbul.HeroineService");
+            PatchProbe(heroineService, "ChangeHeroineAnimationForInteger", "Body");
+            PatchProbe(heroineService, "ChangeHeroineFacialAnimation", "Facial");
+            PatchProbe(heroineService, "ChangeLookScaleAnimation", "Look");
+            PatchProbe(heroineService, "ChangeHeroineAnimationImmediately", "Immediate");
+
             var reactionReady = AccessTools.Method(typeof(Bulbul.FacilityClickHeroine), "ReactionReady");
             if (reactionReady != null)
                 _harmony.Patch(reactionReady, prefix: PatchMethod("ClickReactionPatch", "Prefix"));
@@ -574,6 +581,15 @@ public sealed class Plugin : BaseUnityPlugin
         if (method == null)
             Plugin.Log.LogWarning("Patch method not found: " + typeName + "." + methodName);
         return new HarmonyMethod(method);
+    }
+
+    /// <summary>给 HeroineService 上的方法挂一个只记日志的前缀。</summary>
+    private void PatchProbe(Type type, string methodName, string patchMethodName)
+    {
+        var original = type == null ? null : AccessTools.Method(type, methodName);
+        Logger.LogInfo("Motion probe " + methodName + " -> " + (original != null));
+        if (original != null)
+            _harmony.Patch(original, prefix: PatchMethod("HeroineMotionProbePatch", patchMethodName));
     }
 
     private void PatchPomodoro(Type type, string methodName, string patchTypeName, bool isPrefix)
