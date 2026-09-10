@@ -470,7 +470,7 @@ internal static class HeroineActionBridge
             _changeLook.Invoke(_service, new object[] { scale, seconds, ease });
 
             if (look)
-                Plugin.Log.LogInfo("[Chill Clock] click look: scale=" + scale + " seconds=" + seconds);
+                Plugin.Log.LogInfo("[Chill Clock] look: scale=" + scale + " seconds=" + seconds);
         }
         catch (Exception e)
         {
