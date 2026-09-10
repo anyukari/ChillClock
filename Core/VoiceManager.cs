@@ -32,6 +32,14 @@ internal sealed class VoiceManager
 {
     private const int MaxCachedClips = 40;
     private const float ChainGap = 0.42f;
+
+    /// <summary>
+    /// 闭嘴的时间要卡在音频结束点之前一点点。
+    /// 嘴型开关（Animator 的 Enable_Talk）在整段音频期间都是开的，如果按
+    /// clip.length + ChainGap 关，话说完之后嘴还会多动大半秒。
+    /// </summary>
+    private const float MouthTailMargin = 0.15f;
+
     private const float LoadTimeout = 5f;
 
     private readonly AudioSource _source;
@@ -147,8 +155,12 @@ internal sealed class VoiceManager
                     continue;
 
                 PlayLine(file, clip);
-                yield return new WaitForSecondsRealtime(clip.length + ChainGap);
+
+                // 先按音频长度闭嘴，再等句间停顿——两者分开，嘴不会拖到停顿里
+                yield return new WaitForSecondsRealtime(Mathf.Max(0.1f, clip.length - MouthTailMargin));
                 HeroineActionBridge.SetMouthTalk(false);
+
+                yield return new WaitForSecondsRealtime(ChainGap);
             }
         }
         finally
