@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -64,6 +65,7 @@ internal sealed class VoiceManager
     private bool _chainRunning;
     private string _lastPlayed;
     private float _nextAttempt;
+    private string _pendingClickState;
 
     public VoiceManager(GameObject host)
     {
@@ -191,7 +193,13 @@ internal sealed class VoiceManager
     /// 点击聪音时的反应台词。state 取 Work / Break / Normal，
     /// 对应她此刻是在工作、休息还是普通待机；再按当前时段筛选。
     /// </summary>
-    public VoiceStartResult PlayClick(string state) => Play("Click_" + state, 8f);
+    public VoiceStartResult PlayClick(string state)
+    {
+        var result = Play("Click_" + state, 8f);
+        if (result == VoiceStartResult.Started)
+            _pendingClickState = state;
+        return result;
+    }
 
     private VoiceStartResult Play(string trigger, float cooldown)
     {
@@ -297,9 +305,8 @@ internal sealed class VoiceManager
 
                 PlayLine(file, clip);
 
-                // 先按音频长度闭嘴，再等句间停顿——两者分开，嘴不会拖到停顿里
-                yield return new WaitForSecondsRealtime(Mathf.Max(0.1f, clip.length - MouthTailMargin));
-                HeroineActionBridge.SetMouthTalk(false);
+                // 口型跟着"真正在出声"的时间段走，台词中间的停顿会闭嘴
+                yield return DriveMouth(clip, _catalog.TryGetValue(file, out var line) ? line : null);
 
                 yield return new WaitForSecondsRealtime(ChainGap);
             }
@@ -308,6 +315,53 @@ internal sealed class VoiceManager
         {
             _chainRunning = false;
         }
+    }
+
+    /// <summary>
+    /// 说话期间跟着音频开关口型。
+    ///
+    /// 原来是一条语音从头开到尾，台词中间有停顿的时候嘴还在动。
+    /// 这里用离线算好的时间段（目录第 10 列）来管：说到哪一段就开嘴，空档就闭嘴。
+    /// 没有分段信息的老语音包保持原来的行为（整条开着，结束前一点闭嘴）。
+    /// </summary>
+    private IEnumerator DriveMouth(AudioClip clip, VoiceLine line)
+    {
+        var spans = line?.TalkSpans;
+        if (spans == null || spans.Length < 2)
+        {
+            yield return new WaitForSecondsRealtime(Mathf.Max(0.1f, clip.length - MouthTailMargin));
+            HeroineActionBridge.SetMouthTalk(false);
+            yield break;
+        }
+
+        var elapsed = 0f;
+        var speaking = true;
+        while (elapsed < clip.length)
+        {
+            var shouldTalk = InSpans(spans, elapsed);
+            if (shouldTalk != speaking)
+            {
+                speaking = shouldTalk;
+                HeroineActionBridge.SetMouthTalk(speaking);
+            }
+
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        if (speaking)
+            HeroineActionBridge.SetMouthTalk(false);
+    }
+
+    private static bool InSpans(float[] spans, float t)
+    {
+        for (var i = 0; i + 1 < spans.Length; i += 2)
+        {
+            if (t >= spans[i] && t <= spans[i + 1])
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -337,7 +391,19 @@ internal sealed class VoiceManager
         if (!_catalog.TryGetValue(fileName, out var line))
             return;
 
-        HeroineActionBridge.Play(line.Emotion);
+        // 点击反应单独走一条：大部分时候她只是停下手里的活回头看你一眼，
+        // 用游戏自己的桌面反应动作，而不是每次都换一个手势。
+        if (_pendingClickState != null)
+        {
+            var state = _pendingClickState;
+            _pendingClickState = null;
+            HeroineActionBridge.PlayClickReaction(state, line.Emotion);
+        }
+        else
+        {
+            HeroineActionBridge.Play(line.Emotion);
+        }
+
         // 英文还没翻译完时，英语用户至少能看到日文原文，不至于空字幕
         var english = string.IsNullOrEmpty(line.English) ? line.Japanese : line.English;
         _subtitle.Show(LocalizedText.Pick(line.Chinese, english, line.Japanese), clip.length);
@@ -613,10 +679,37 @@ internal sealed class VoiceManager
                 SeqGroup = parts.Length > 6 ? parts[6].Trim() : string.Empty,
                 SeqOrder = parts.Length > 7 && int.TryParse(parts[7].Trim(), out var order) ? order : 0,
                 // 第 9 列（可选）：Morning / Noon / Evening / Night，留空表示任何时段都能用
-                Time = parts.Length > 8 ? parts[8].Trim() : string.Empty
+                Time = parts.Length > 8 ? parts[8].Trim() : string.Empty,
+                // 第 10 列（可选）：真正在出声的时间段，用来管口型
+                TalkSpans = parts.Length > 9 ? ParseSpans(parts[9]) : null
             };
             _catalog[line.File] = line;
         }
+    }
+
+    /// <summary>把 "0.08-1.24;1.62-3.05" 解析成 start,end,start,end… 的扁平数组。</summary>
+    private static float[] ParseSpans(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var spans = new List<float>();
+        foreach (var part in value.Split(';'))
+        {
+            var dash = part.IndexOf('-');
+            if (dash <= 0)
+                continue;
+
+            if (float.TryParse(part.Substring(0, dash), NumberStyles.Float, CultureInfo.InvariantCulture, out var start) &&
+                float.TryParse(part.Substring(dash + 1), NumberStyles.Float, CultureInfo.InvariantCulture, out var end) &&
+                end > start)
+            {
+                spans.Add(start);
+                spans.Add(end);
+            }
+        }
+
+        return spans.Count >= 2 ? spans.ToArray() : null;
     }
 
     private void BuildPools()
@@ -745,6 +838,13 @@ internal sealed class VoiceManager
         public string SeqGroup;
         public int SeqOrder;
         public string Time;
+
+        /// <summary>
+        /// 这条语音"真正在出声"的时间段，扁平存成 start,end,start,end…（秒）。
+        /// 由 tools/analyze-speech-spans.py 离线算好写进目录的第 10 列。
+        /// 空表示没有分段信息，口型按整条处理。
+        /// </summary>
+        public float[] TalkSpans;
     }
 }
 

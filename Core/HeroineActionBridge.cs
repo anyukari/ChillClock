@@ -126,6 +126,7 @@ internal static class HeroineActionBridge
     private static Type _animationTypeEnum;
     private static object _useObjectController;
     private static PropertyInfo _pDeskType;
+    private static MethodInfo _changeAnimationImmediately;
     private static MethodInfo _isGameEndDirection;
 
     private static MonoBehaviour _clickHeroine;
@@ -415,6 +416,56 @@ internal static class HeroineActionBridge
         }
     }
 
+    /// <summary>点击反应里"换个手势做动作"的概率（其余时候她只是回头看你一眼）。</summary>
+    private const int ClickGestureChance = 25;
+
+    /// <summary>
+    /// 点击聪音时的身体反应。
+    ///
+    /// 她是个认真工作的人，大部分时候应该只是停下手里的活、回头跟你说一句再接着干，
+    /// 而不是每次都站起来比划。所以这里默认走游戏自己的桌面反应动作
+    /// （Desk_Click_Normal/Work/Rest_Reaction，id 402/403/404）——
+    /// 游戏在她被点击时用的就是这三个，姿态、手的位置都和当前桌面配套；
+    /// 只有偶尔才换成情绪对应的手势。
+    /// </summary>
+    public static void PlayClickReaction(string state, string emotion)
+    {
+        if (!Enabled || IsGameSequenceBusy())
+            return;
+
+        if (Rng.Next(100) < ClickGestureChance || !PlayDeskReaction(state))
+            Play(emotion);
+    }
+
+    /// <summary>
+    /// 播游戏自己的桌面反应动作。用的是 ChangeHeroineAnimationImmediately，
+    /// 和小剧情里播剧情动作是同一条路（Animator.Play 直接点名，不受触发白名单限制）。
+    /// </summary>
+    private static bool PlayDeskReaction(string state)
+    {
+        var id = state == "Work" ? 403 : (state == "Break" ? 404 : 402);
+
+        if (_changeAnimationImmediately == null && EnsureService() == null)
+            return false;
+        if (_changeAnimationImmediately == null)
+            return false;
+
+        try
+        {
+            var before = CurrentAnimationName();
+            _changeAnimationImmediately.Invoke(_service, new object[] { id });
+            Plugin.Log.LogInfo("[Chill Clock] click desk reaction: " + AnimationName(id) + "(" + id + ")" +
+                               " state=" + ActionStateName(GetActionState()) +
+                               " was=" + before);
+            return true;
+        }
+        catch (Exception e)
+        {
+            Plugin.Log.LogWarning("[Chill Clock] desk reaction failed: " + e.Message);
+            return false;
+        }
+    }
+
     /// <summary>播放一个情绪对应的身体动作，并同步一个安全的表情。</summary>
     public static void Play(string emotion)
     {
@@ -692,6 +743,7 @@ internal static class HeroineActionBridge
         var serviceType = service.GetType();
         _getCurrentAnimation = serviceType.GetMethod("GetCurrentAnimationType", Instance);
         _animationTypeEnum = _getCurrentAnimation?.ReturnType;
+        _changeAnimationImmediately = serviceType.GetMethod("ChangeHeroineAnimationImmediately", Instance);
 
         // 桌面上现在摆的是什么（书 / 电脑 / 写字），用来判断她的工作姿势
         try
