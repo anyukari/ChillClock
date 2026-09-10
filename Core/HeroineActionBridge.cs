@@ -31,22 +31,12 @@ internal static class HeroineActionBridge
     /// <summary>
     /// 情绪 -> 动作（AnimationType 的 id）。
     ///
-    /// 只用 Story_SubBase* 这一组（1001-1004 / 1101-1103 / 1201-1202 / 1301-1302）：
-    /// 它们是游戏自己在"聪音坐着和你说话"时用的上半身手势，手不往桌面上放，
-    /// 也不会把她切到别的工作姿势。
+    /// 这一组是"说话手势"，也只用 Story_SubBase*（1001-1004 / 1101-1103 /
+    /// 1201-1202 / 1301-1302）。游戏自己在她说话时的做法就是这个：
+    /// FacilityClickHeroine.OneWord 会去挑一个小剧情，小剧情走的就是这套手势。
     ///
-    /// 下面这些一个都不能用（原来 Working / Relaxed 就是用的它们）：
-    ///   253/255 WorkBase002 翻页、256 WorkBase002 端茶、755 BreakBase004 吹茶
-    ///   304 WorkBase003 端茶、305 WorkBase003 掃桌面
-    ///   651/652 BreakBase002 翻书页
-    /// 这些动作要和桌上的道具（文件、杯子、书）互动，道具是游戏自己按剧本刷出来的；
-    /// 我们单独播的时候道具不在，手就按老位置伸过去，穿过键盘和桌面。
-    /// 更麻烦的是 304/305 属于 WorkBase003，播完会把她留在"伏案写字"那一套姿势里，
-    /// 于是她明明在敲键盘，却开始对着桌面写字。
-    ///
-    /// 2026-09-11 实测：她正在敲键盘（state=WorkPC、desk=Pc，本身就是 WorkBase002 家族）时
-    /// 播 253/255 翻页，手照样穿过键盘 —— 说明这几个动作要的是游戏自己摆出来的纸，
-    /// 跟"是不是同一个动画家族"无关。所以这批道具动作一律不用了。
+    /// 桌面上那些动作（翻页、端茶、翻书……）不在这一组里，见下面的 SceneAnimations：
+    /// 那些是"她干活时的动作"，要和她当前那一套基础动作配套播，游戏自己也是这么管的。
     /// </summary>
     private static readonly Dictionary<string, int[]> EmotionAnimations =
         new Dictionary<string, int[]>(StringComparer.OrdinalIgnoreCase)
@@ -71,6 +61,24 @@ internal static class HeroineActionBridge
             ["Nervous"] = new[] { 1302, 1002 },
             ["Idle"] = new[] { 1301, 1001 }
         };
+
+    /// <summary>
+    /// 她干活时那一套里的子动作，按"基础动作段"分组。
+    ///
+    /// 游戏自己的规则就在 HeroineStateWorkPC / WorkBook / WorkReport 的 UpdateAnimation 里：
+    ///   当前动作在这个段里  -> 在这段里按权重挑下一个（不会跨段）
+    ///   当前动作不在这个段里 -> 整段切回本段的基准动作（200 / 250 / 300）
+    /// 而且每段对应一种桌面摆设：200 段=电脑、250 段=书、300 段=写字。
+    /// 之前我们拿 desk=Pc 去播 250 段的翻页，就是跨段了 —— 手按"书"的位置伸过去，
+    /// 穿过键盘。所以现在只允许用**她当前所在段**里的子动作。
+    ///
+    /// 只有这些 id 是游戏开放"直接触发"的（ChangeHeroineAnimationForInteger 的白名单），
+    /// 200 段（电脑）一个都没有，所以那种情况下只能用说话手势。
+    /// </summary>
+    private static readonly int[] BookDeskMotions = { 253, 255, 256 };      // 250 段
+    private static readonly int[] ReportDeskMotions = { 304, 305 };         // 300 段
+    private static readonly int[] BreakBookMotions = { 651, 652 };          // 650 段
+    private static readonly int[] BreakTeaTimeMotions = { 755 };            // 750 段
 
 
     /// <summary>情绪 -> FacialType（Animator 整数参数 "Facial"）。</summary>
@@ -315,8 +323,57 @@ internal static class HeroineActionBridge
         return null;
     }
 
+    /// <summary>她当前正在播的整套基础动作（AnimationType 的数值），读不到返回 -1。</summary>
+    private static int GetCurrentAnimationType()
+    {
+        try
+        {
+            if (_getCurrentAnimation == null && EnsureService() == null)
+                return -1;
+            if (_getCurrentAnimation == null || _service == null)
+                return -1;
+
+            var raw = _getCurrentAnimation.Invoke(_service, null);
+            return raw == null ? -1 : Convert.ToInt32(raw);
+        }
+        catch
+        {
+            return -1;
+        }
+    }
+
     /// <summary>
-    /// 她此刻在做什么（HeroineAI.ActionStateType 的数值），读不到返回 -1。
+    /// 照着游戏自己的规则挑动作：只在**她当前所在的那一套基础动作**里挑子动作。
+    ///
+    /// 游戏就是这么做的（HeroineStateWorkPC/WorkBook/WorkReport 的 UpdateAnimation：
+    /// 「当前动作在本段里 → 在本段里按权重挑下一个；不在 → 整段切回本段基准」）。
+    /// 跨段播的代价就是穿模：她坐在电脑前（200 段）时去播 250 段的翻页，
+    /// 手会按"书"的桌面位置伸过去；播 300 段的动作则会把她整个换成伏案写字的姿势。
+    ///
+    /// 当前这一段没有开放触发的子动作（比如 200 段电脑桌）时返回 null，
+    /// 调用方退回"坐着说话"的手势。
+    /// </summary>
+    private static int[] SceneAnimations()
+    {
+        var current = GetCurrentAnimationType();
+        if (current < 0)
+            return null;
+
+        if (current >= 250 && current <= 256) // WorkBase002：桌上是书
+            return BookDeskMotions;
+        if (current >= 300 && current <= 305) // WorkBase003：伏案写字
+            return ReportDeskMotions;
+        if (current >= 650 && current <= 653) // BreakBase002：休息时看书
+            return BreakBookMotions;
+        if (current >= 750 && current <= 755) // BreakBase004：休息时喝茶
+            return BreakTeaTimeMotions;
+
+        // 200 段（电脑桌）和其它段一律不碰桌面上的东西
+        return null;
+    }
+
+    /// <summary>
+    /// 她此刻在做什么（HeroineAI.ActionStateType 的数值），读不到返回 -1，只用于日志。
     /// 17 WorkPC / 18 WorkBook / 19 WorkReport / 21 BreakReadBook / 23 BreakTeaTime …
     /// </summary>
     private static int GetActionState()
@@ -364,15 +421,16 @@ internal static class HeroineActionBridge
         if (!Enabled || IsGameSequenceBusy())
             return;
 
-        // 我们的动作都是"坐在桌前和你说话"的手势——游戏自己在她工作时说短句
-        // （FacilityClickHeroine.OneWord → 小剧情）用的也是这一组。
-        // 她离席、睡着了的时候不在桌前，这套手势会显得突兀：那就只动嘴和表情。
         int[] ids = null;
-        if (!InvokeServiceFlag("IsLeaveChair") &&
-            !InvokeServiceFlag("IsSleeping") &&
-            EmotionAnimations.TryGetValue(emotion ?? "Idle", out var byEmotion))
+
+        // 她离席、睡着了的时候不在桌前，动身体只会更奇怪：只动嘴和表情
+        if (!InvokeServiceFlag("IsLeaveChair") && !InvokeServiceFlag("IsSleeping"))
         {
-            ids = byEmotion;
+            // 先看场景：她在自己那一套基础动作里时，可以用这一套的桌面子动作；
+            // 没有合适的话，退回和情绪搭配的说话手势（游戏自己说短句用的那一套）。
+            ids = SceneAnimations();
+            if (ids == null && EmotionAnimations.TryGetValue(emotion ?? "Idle", out var byEmotion))
+                ids = byEmotion;
         }
 
         if (ids != null &&
@@ -423,14 +481,10 @@ internal static class HeroineActionBridge
     {
         try
         {
-            if (_getCurrentAnimation == null || _service == null || _animationTypeEnum == null)
+            var value = GetCurrentAnimationType();
+            if (value < 0)
                 return "?";
 
-            var raw = _getCurrentAnimation.Invoke(_service, null);
-            if (raw == null)
-                return "?";
-
-            var value = Convert.ToInt32(raw);
             return (Enum.GetName(_animationTypeEnum, value) ?? "?") + "(" + value + ")";
         }
         catch
