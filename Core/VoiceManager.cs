@@ -27,9 +27,10 @@ internal enum VoiceStartResult
 /// <summary>
 /// 聪音的语音提醒。
 /// 语音包按这个顺序找：
-///   1. plugins\ChillClock\Voices.pack —— 单个 ZIP（内含 voice_catalog.tsv + 全部 OGG）
-///   2. plugins\ChillClock\Voices\     —— 散放的 OGG 目录
-///   3. DLL 内嵌的那几十条 WAV        —— 最后的兜底
+///   1. DLL 内嵌的 Voices.pack          —— 发布形态，整个 mod 只有一个 ChillClock.dll
+///   2. plugins\ChillClock\Voices.pack  —— 外置包，不重新构建也能换
+///   3. plugins\ChillClock\Voices\      —— 散放的 OGG 目录
+///   4. DLL 内嵌的那几十条 WAV          —— 最后的兜底
 /// </summary>
 internal sealed class VoiceManager
 {
@@ -57,7 +58,7 @@ internal sealed class VoiceManager
     private readonly HashSet<string> _loading = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     private readonly string _externalDir;
-    private readonly ZipArchive _pack;
+    private ZipArchive _pack;
     private readonly object _packLock = new object();
     private readonly string _tempDir;
     private bool _chainRunning;
@@ -78,28 +79,58 @@ internal sealed class VoiceManager
 
         var pluginDir = Path.GetDirectoryName(typeof(Plugin).Assembly.Location);
         if (!string.IsNullOrEmpty(pluginDir))
-        {
             _externalDir = Path.Combine(pluginDir, "ChillClock", "Voices");
 
-            var packPath = Path.Combine(pluginDir, "ChillClock", "Voices.pack");
-            if (File.Exists(packPath))
+        _tempDir = Path.Combine(Path.GetTempPath(), "ChillClockVoice");
+        _pack = OpenPack();
+
+        LoadCatalog();
+    }
+
+    /// <summary>先找 DLL 内嵌的语音包，再找外置的 Voices.pack。</summary>
+    private static ZipArchive OpenPack()
+    {
+        try
+        {
+            var assembly = Assembly.GetExecutingAssembly();
+            var resource = assembly.GetManifestResourceNames()
+                .FirstOrDefault(n => n.EndsWith("Voices.pack", StringComparison.OrdinalIgnoreCase));
+            if (resource != null)
             {
-                try
+                var stream = assembly.GetManifestResourceStream(resource);
+                if (stream != null)
                 {
-                    _pack = new ZipArchive(File.OpenRead(packPath), ZipArchiveMode.Read);
-                    Plugin.Log.LogInfo("[Chill Clock] voice pack: " + packPath + " (" + _pack.Entries.Count + " entries)");
-                }
-                catch (Exception e)
-                {
-                    _pack = null;
-                    Plugin.Log.LogWarning("[Chill Clock] voice pack open failed, falling back to folder: " + e.Message);
+                    var pack = new ZipArchive(stream, ZipArchiveMode.Read);
+                    Plugin.Log.LogInfo("[Chill Clock] voice pack: embedded (" + pack.Entries.Count + " entries)");
+                    return pack;
                 }
             }
         }
+        catch (Exception e)
+        {
+            Plugin.Log.LogWarning("[Chill Clock] embedded voice pack failed: " + e.Message);
+        }
 
-        _tempDir = Path.Combine(Path.GetTempPath(), "ChillClockVoice");
+        try
+        {
+            var pluginDir = Path.GetDirectoryName(typeof(Plugin).Assembly.Location);
+            if (!string.IsNullOrEmpty(pluginDir))
+            {
+                var path = Path.Combine(pluginDir, "ChillClock", "Voices.pack");
+                if (File.Exists(path))
+                {
+                    var pack = new ZipArchive(File.OpenRead(path), ZipArchiveMode.Read);
+                    Plugin.Log.LogInfo("[Chill Clock] voice pack: " + path + " (" + pack.Entries.Count + " entries)");
+                    return pack;
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            Plugin.Log.LogWarning("[Chill Clock] external voice pack failed: " + e.Message);
+        }
 
-        LoadCatalog();
+        return null;
     }
 
     /// <summary>退出时释放包句柄。</summary>

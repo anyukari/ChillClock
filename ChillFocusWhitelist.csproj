@@ -15,11 +15,23 @@
 
   <PropertyGroup>
     <GameDir Condition="'$(GameDir)' == ''">E:\SOFT\STEAM\steamapps\common\Chill with You Lo-Fi Story</GameDir>
+    <!-- 语音包（ZIP）内嵌进 DLL，发布形态就只有一个 ChillClock.dll。
+         可以 -p:VoicePackFile=... 指到别的包上。 -->
+    <VoicePackFile Condition="'$(VoicePackFile)' == ''">$(MSBuildProjectDirectory)\..\outputs\ChillClockVoicePack\Voices.pack</VoicePackFile>
   </PropertyGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="Voices\*.wav;Voices\*.tsv" />
+    <EmbeddedResource Include="$(VoicePackFile)" LogicalName="ChillClock.Voices.pack"
+                      Condition="Exists('$(VoicePackFile)')" />
   </ItemGroup>
+
+  <Target Name="VoicePackReport" BeforeTargets="CoreCompile">
+    <Message Importance="high" Condition="Exists('$(VoicePackFile)')"
+             Text="内嵌语音包: $(VoicePackFile)" />
+    <Warning Condition="!Exists('$(VoicePackFile)')"
+             Text="找不到语音包 $(VoicePackFile)，构建出来的 DLL 只会带内嵌的那几十条 WAV" />
+  </Target>
 
   <ItemGroup>
     <Reference Include="0Harmony" Private="false">
