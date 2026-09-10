@@ -28,6 +28,22 @@ internal static class HeroineActionBridge
 
     private static readonly System.Random Rng = new System.Random();
 
+    /// <summary>
+    /// 情绪 -> 动作（AnimationType 的 id）。
+    ///
+    /// 只用 Story_SubBase* 这一组（1001-1004 / 1101-1103 / 1201-1202 / 1301-1302）：
+    /// 它们是游戏自己在"聪音坐着和你说话"时用的上半身手势，手不往桌面上放，
+    /// 也不会把她切到别的工作姿势。
+    ///
+    /// 下面这些一个都不能用（原来 Working / Relaxed 就是用的它们）：
+    ///   253/255 WorkBase002 翻页、256 WorkBase002 端茶、755 BreakBase004 吹茶
+    ///   304 WorkBase003 端茶、305 WorkBase003 掃桌面
+    ///   651/652 BreakBase002 翻书页
+    /// 这些动作要和桌上的道具（文件、杯子、书）互动，道具是游戏自己按剧本刷出来的；
+    /// 我们单独播的时候道具不在，手就按老位置伸过去，穿过键盘和桌面。
+    /// 更麻烦的是 304/305 属于 WorkBase003，播完会把她留在"伏案写字"那一套姿势里，
+    /// 于是她明明在敲键盘，却开始对着桌面写字。
+    /// </summary>
     private static readonly Dictionary<string, int[]> EmotionAnimations =
         new Dictionary<string, int[]>(StringComparer.OrdinalIgnoreCase)
         {
@@ -40,16 +56,16 @@ internal static class HeroineActionBridge
             ["Confused"] = new[] { 1302, 1201 },
             ["Surprise"] = new[] { 1003, 1001 },
             ["Shy"] = new[] { 1001, 1004 },
-            ["Think"] = new[] { 651, 652 },
-            ["Curious"] = new[] { 651 },
-            ["Relaxed"] = new[] { 256, 755, 304 },
+            ["Think"] = new[] { 1301, 1004 },
+            ["Curious"] = new[] { 1004, 1301 },
+            ["Relaxed"] = new[] { 1001, 1101 },
             ["Tired"] = new[] { 1201, 1002 },
             ["Sleepy"] = new[] { 1201 },
-            ["Working"] = new[] { 253, 255, 256, 305 },
+            ["Working"] = new[] { 1004, 1301 },
             ["Excited"] = new[] { 1004, 1001 },
-            ["Greeting"] = new[] { 1001, 1004 },
-            ["Nervous"] = new[] { 1302, 1201 },
-            ["Idle"] = new[] { 253, 255 }
+            ["Greeting"] = new[] { 1001, 1101 },
+            ["Nervous"] = new[] { 1302, 1002 },
+            ["Idle"] = new[] { 1301, 1001 }
         };
 
     /// <summary>情绪 -> FacialType（Animator 整数参数 "Facial"）。</summary>
@@ -298,9 +314,12 @@ internal static class HeroineActionBridge
             ids.Length > 0 &&
             EnsureService() != null)
         {
+            var id = ids[Rng.Next(ids.Length)];
             try
             {
-                _changeAnimation.Invoke(_service, new object[] { ids[Rng.Next(ids.Length)] });
+                _changeAnimation.Invoke(_service, new object[] { id });
+                Plugin.Log.LogInfo("[Chill Clock] action: " + (emotion ?? "") +
+                                   " -> " + AnimationName(id) + "(" + id + ")");
             }
             catch (Exception e)
             {
@@ -311,6 +330,24 @@ internal static class HeroineActionBridge
 
         if (emotion != null && EmotionFacials.TryGetValue(emotion, out var facial))
             ChangeFacial(facial);
+    }
+
+    /// <summary>把动作 id 翻成 AnimationType 里的名字，只给日志用。</summary>
+    private static string AnimationName(int id)
+    {
+        try
+        {
+            var parameters = _changeAnimation?.GetParameters();
+            var type = parameters != null && parameters.Length > 0 ? parameters[0].ParameterType : null;
+            if (type == null || !type.IsEnum)
+                return "?";
+
+            return Enum.GetName(type, id) ?? "?";
+        }
+        catch
+        {
+            return "?";
+        }
     }
 
     /// <summary>设置游戏表情（Animator 整数参数 "Facial"）。</summary>
