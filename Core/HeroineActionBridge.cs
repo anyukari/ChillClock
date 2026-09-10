@@ -126,7 +126,7 @@ internal static class HeroineActionBridge
     private static Type _animationTypeEnum;
     private static object _useObjectController;
     private static PropertyInfo _pDeskType;
-    private static MethodInfo _changeAnimationImmediately;
+    private static MethodInfo _changeLook;
     private static MethodInfo _isGameEndDirection;
 
     private static MonoBehaviour _clickHeroine;
@@ -416,53 +416,61 @@ internal static class HeroineActionBridge
         }
     }
 
-    /// <summary>点击反应里"换个手势做动作"的概率（其余时候她只是回头看你一眼）。</summary>
+    /// <summary>点击反应里"换个手势做动作"的概率（其余时候她照旧干活，只回头）。</summary>
     private const int ClickGestureChance = 25;
 
     /// <summary>
     /// 点击聪音时的身体反应。
     ///
-    /// 她是个认真工作的人，大部分时候应该只是停下手里的活、回头跟你说一句再接着干，
-    /// 而不是每次都站起来比划。所以这里默认走游戏自己的桌面反应动作
-    /// （Desk_Click_Normal/Work/Rest_Reaction，id 402/403/404）——
-    /// 游戏在她被点击时用的就是这三个，姿态、手的位置都和当前桌面配套；
-    /// 只有偶尔才换成情绪对应的手势。
+    /// 不动她的身体动画：她是个认真工作的人，被点了也就是抬头看你一眼，
+    /// 手上的活不停。转头交给 LookAt IK（见 SetLookAtPlayer），
+    /// 只偶尔（四分之一）才换一个情绪手势。
+    ///
+    /// 试过游戏自己的 Desk_Click_*_Reaction(402/403/404)：那个动作本身是
+    /// "停下手里的活、回头看你"整段演出，播下去她就不干活了，还会来回看好几次，
+    /// 和"一边干活一边说话"正好相反。
     /// </summary>
     public static void PlayClickReaction(string state, string emotion)
     {
         if (!Enabled || IsGameSequenceBusy())
             return;
 
-        if (Rng.Next(100) < ClickGestureChance || !PlayDeskReaction(state))
+        if (Rng.Next(100) < ClickGestureChance)
             Play(emotion);
     }
 
     /// <summary>
-    /// 播游戏自己的桌面反应动作。用的是 ChangeHeroineAnimationImmediately，
-    /// 和小剧情里播剧情动作是同一条路（Animator.Play 直接点名，不受触发白名单限制）。
+    /// 让她转头看向玩家 / 转回去。
+    ///
+    /// 走 HeroineService.ChangeLookScaleByManual（她自己的 LookAt IK）：
+    /// 只改头部和眼神的权重，身体动画照旧，所以她还在敲键盘、翻书、写字，
+    /// 只是转过头来跟你说话 —— 就是"一边干活一边回头"。
     /// </summary>
-    private static bool PlayDeskReaction(string state)
+    public static void SetLookAtPlayer(bool look)
     {
-        var id = state == "Work" ? 403 : (state == "Break" ? 404 : 402);
+        if (!Enabled || IsGameSequenceBusy())
+            return;
 
-        if (_changeAnimationImmediately == null && EnsureService() == null)
-            return false;
-        if (_changeAnimationImmediately == null)
-            return false;
+        if (_changeLook == null && EnsureService() == null)
+            return;
+        if (_changeLook == null)
+            return;
 
         try
         {
-            var before = CurrentAnimationName();
-            _changeAnimationImmediately.Invoke(_service, new object[] { id });
-            Plugin.Log.LogInfo("[Chill Clock] click desk reaction: " + AnimationName(id) + "(" + id + ")" +
-                               " state=" + ActionStateName(GetActionState()) +
-                               " was=" + before);
-            return true;
+            // 第 3 个参数是 DG.Tweening.Ease，1 = Linear
+            var parameters = _changeLook.GetParameters();
+            var ease = parameters.Length > 2
+                ? Enum.ToObject(parameters[2].ParameterType, 1)
+                : null;
+
+            // 看过去慢一点（转头要看得见），转回来快一点
+            _changeLook.Invoke(_service, new object[] { look ? 1f : 0f, look ? 0.5f : 1f, ease });
         }
         catch (Exception e)
         {
-            Plugin.Log.LogWarning("[Chill Clock] desk reaction failed: " + e.Message);
-            return false;
+            Plugin.Log.LogWarning("[Chill Clock] look at player failed: " + e.Message);
+            _changeLook = null;
         }
     }
 
@@ -743,7 +751,7 @@ internal static class HeroineActionBridge
         var serviceType = service.GetType();
         _getCurrentAnimation = serviceType.GetMethod("GetCurrentAnimationType", Instance);
         _animationTypeEnum = _getCurrentAnimation?.ReturnType;
-        _changeAnimationImmediately = serviceType.GetMethod("ChangeHeroineAnimationImmediately", Instance);
+        _changeLook = serviceType.GetMethod("ChangeLookScaleByManual", Instance);
 
         // 桌面上现在摆的是什么（书 / 电脑 / 写字），用来判断她的工作姿势
         try

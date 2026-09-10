@@ -66,6 +66,7 @@ internal sealed class VoiceManager
     private string _lastPlayed;
     private float _nextAttempt;
     private string _pendingClickState;
+    private bool _lookingAtPlayer;
 
     public VoiceManager(GameObject host)
     {
@@ -314,6 +315,13 @@ internal sealed class VoiceManager
         finally
         {
             _chainRunning = false;
+
+            // 不管中间怎么结束，都让她把头转回手里的活
+            if (_lookingAtPlayer)
+            {
+                _lookingAtPlayer = false;
+                HeroineActionBridge.SetLookAtPlayer(false);
+            }
         }
     }
 
@@ -398,6 +406,13 @@ internal sealed class VoiceManager
             var state = _pendingClickState;
             _pendingClickState = null;
             HeroineActionBridge.PlayClickReaction(state, line.Emotion);
+
+            // "一边干活一边回头说话"：只转头部，身体继续做她的事
+            if (!_lookingAtPlayer)
+            {
+                _lookingAtPlayer = true;
+                HeroineActionBridge.SetLookAtPlayer(true);
+            }
         }
         else
         {
