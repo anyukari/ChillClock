@@ -36,6 +36,66 @@ internal static class FocusWhitelistActivatePatch
 }
 
 /// <summary>
+/// 只读诊断：游戏自己在播剧情 / 点击反应时，会通过
+/// ScenarioReader.CommandChangeMotion 一次下发三件事 ——
+/// 身体动作(-1 = 不改)、表情、转头幅度。把这三个值记下来，
+/// 我们就能核对"我们自己下的动作，和游戏自己下的到底是不是一回事"。
+///
+/// 只记日志，不改任何行为。
+/// </summary>
+internal static class ScenarioMotionProbePatch
+{
+    private static System.Reflection.FieldInfo _body;
+    private static System.Reflection.FieldInfo _facial;
+    private static System.Reflection.FieldInfo _look;
+    private static System.Reflection.FieldInfo _lookSeconds;
+    private static System.Reflection.FieldInfo _lookEase;
+    private static bool _resolved;
+
+    private static void Postfix(object __0)
+    {
+        try
+        {
+            if (__0 == null)
+                return;
+
+            if (!_resolved)
+            {
+                _resolved = true;
+                var type = __0.GetType();
+                _body = AccessTools.Field(type, "BodyMotion");
+                _facial = AccessTools.Field(type, "FacialMotion");
+                _look = AccessTools.Field(type, "LookScale");
+                _lookSeconds = AccessTools.Field(type, "LookSpeedSeconds");
+                _lookEase = AccessTools.Field(type, "LookEaseType");
+            }
+
+            Plugin.Log.LogInfo("[Chill Clock] game motion: body=" + Value(_body, __0) +
+                               " facial=" + Value(_facial, __0) +
+                               " look=" + Value(_look, __0) +
+                               " lookSec=" + Value(_lookSeconds, __0) +
+                               " ease=" + Value(_lookEase, __0));
+        }
+        catch
+        {
+            // 诊断用，出错就算了
+        }
+    }
+
+    private static string Value(System.Reflection.FieldInfo field, object target)
+    {
+        try
+        {
+            return field == null ? "?" : (field.GetValue(target)?.ToString() ?? "null");
+        }
+        catch
+        {
+            return "?";
+        }
+    }
+}
+
+/// <summary>
 /// 点击聪音的反应。默认不接管（走游戏原逻辑）；打开 ClickReaction 后，
 /// 满足条件时用我们池子里的台词回应，并跳过游戏原本的反应。
 ///

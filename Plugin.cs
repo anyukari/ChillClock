@@ -143,6 +143,15 @@ public sealed class Plugin : BaseUnityPlugin
             PatchCountup(countup, "ResetTimer", "CountupResetPatch", true);
             PatchCountup(countup, "CompleteCountupTimer", "CountupCompletePatch", false);
 
+            // 只读诊断：把游戏自己下发的"动作 / 表情 / 转头"记进日志
+            var scenarioReader = AccessTools.TypeByName("Bulbul.ScenarioReader");
+            var changeMotion = scenarioReader == null
+                ? null
+                : AccessTools.Method(scenarioReader, "CommandChangeMotion");
+            Logger.LogInfo("Scenario motion probe -> " + (changeMotion != null));
+            if (changeMotion != null)
+                _harmony.Patch(changeMotion, postfix: PatchMethod("ScenarioMotionProbePatch", "Postfix"));
+
             var reactionReady = AccessTools.Method(typeof(Bulbul.FacilityClickHeroine), "ReactionReady");
             if (reactionReady != null)
                 _harmony.Patch(reactionReady, prefix: PatchMethod("ClickReactionPatch", "Prefix"));
