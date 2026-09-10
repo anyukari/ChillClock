@@ -127,6 +127,13 @@ internal static class HeroineActionBridge
     private static object _useObjectController;
     private static PropertyInfo _pDeskType;
     private static MethodInfo _changeLook;
+    private static MethodInfo _lookInitSlowly;
+    private static MethodInfo _initFacial;
+    private static MethodInfo _initFacialAfterDelay;
+
+    /// <summary>这一句台词我们动过她的表情/视线吗（说完要收拾干净）。</summary>
+    private static bool _lineTouchedLook;
+    private static bool _lineTouchedFacial;
     private static MethodInfo _isGameEndDirection;
 
     private static MonoBehaviour _clickHeroine;
@@ -501,13 +508,62 @@ internal static class HeroineActionBridge
             PlayGesture(emotion);
 
         if (emotion != null && EmotionFacials.TryGetValue(emotion, out var facial))
+        {
             ChangeFacial(facial);
+            _lineTouchedFacial = true;
+        }
 
         if (!atDesk && !isClickReaction)
             return false;
 
         SetLookAtPlayer(true);
+        _lineTouchedLook = true;
         return true;
+    }
+
+    /// <summary>
+    /// 一句台词说完的收尾 —— 照游戏自己的做法（RoomGameManager.OnEndPlayedReaction）：
+    ///   _heroineService.LookInitSlowly();                    // 视线慢慢回正（1.5 速、OutQuad）
+    ///   _heroineService.InitHeroineFacialAfterDelay(0.77f);  // 表情 0.77 秒后复位
+    ///
+    /// 之前我们只关了口型，表情一直留在台词那副（生气说完就一直板着脸）。
+    /// 只收拾我们自己动过的东西，她本来就有的表情/视线不去碰。
+    /// </summary>
+    public static void EndLineReaction()
+    {
+        var touchedLook = _lineTouchedLook;
+        var touchedFacial = _lineTouchedFacial;
+        _lineTouchedLook = false;
+        _lineTouchedFacial = false;
+
+        if (!touchedLook && !touchedFacial)
+            return;
+        if (EnsureService() == null)
+            return;
+
+        if (touchedLook && _lookInitSlowly != null)
+        {
+            try
+            {
+                _lookInitSlowly.Invoke(_service, null);
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogWarning("[Chill Clock] look init failed: " + e.Message);
+            }
+        }
+
+        if (touchedFacial && _initFacialAfterDelay != null)
+        {
+            try
+            {
+                _initFacialAfterDelay.Invoke(_service, new object[] { 0.77f });
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogWarning("[Chill Clock] facial init failed: " + e.Message);
+            }
+        }
     }
 
     /// <summary>她此刻是不是坐在桌前干活（电脑/看书/写字三种工作状态）。</summary>
@@ -801,6 +857,9 @@ internal static class HeroineActionBridge
         _getCurrentAnimation = serviceType.GetMethod("GetCurrentAnimationType", Instance);
         _animationTypeEnum = _getCurrentAnimation?.ReturnType;
         _changeLook = serviceType.GetMethod("ChangeLookScaleByManual", Instance);
+        _lookInitSlowly = serviceType.GetMethod("LookInitSlowly", Instance);
+        _initFacial = serviceType.GetMethod("InitHeroineFacial", Instance);
+        _initFacialAfterDelay = serviceType.GetMethod("InitHeroineFacialAfterDelay", Instance);
 
         // 桌面上现在摆的是什么（书 / 电脑 / 写字），用来判断她的工作姿势
         try

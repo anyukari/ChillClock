@@ -65,7 +65,6 @@ internal sealed class VoiceManager
     private bool _chainRunning;
     private string _lastPlayed;
     private float _nextAttempt;
-    private bool _lookingAtPlayer;
     private bool _nextIsClick;
 
     public VoiceManager(GameObject host)
@@ -316,12 +315,8 @@ internal sealed class VoiceManager
         {
             _chainRunning = false;
 
-            // 不管中间怎么结束，都让她把头转回手里的活
-            if (_lookingAtPlayer)
-            {
-                _lookingAtPlayer = false;
-                HeroineActionBridge.SetLookAtPlayer(false);
-            }
+            // 不管中间怎么结束，都收拾干净：视线慢慢回正、表情复位
+            HeroineActionBridge.EndLineReaction();
         }
     }
 
@@ -401,7 +396,7 @@ internal sealed class VoiceManager
 
         // 念台词时按游戏自己的规则来（她干活时不动身体、只转头；不在干活时只换表情），
         // 链子结束时统一把视线放回去。
-        _lookingAtPlayer = HeroineActionBridge.Play(line.Emotion, _nextIsClick);
+        HeroineActionBridge.Play(line.Emotion, _nextIsClick);
         _nextIsClick = false;
 
         // 英文还没翻译完时，英语用户至少能看到日文原文，不至于空字幕
