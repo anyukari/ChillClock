@@ -88,7 +88,6 @@ internal sealed class SettingsPageInjector
             ResetBinding();
 
         _settingUi = ui;
-        Plugin.Log.LogInfo("[Chill Clock UI] building page");
         BuildPage(ui);
         _pageBuilt = true;
         _wasActive = ui.gameObject.activeInHierarchy;
@@ -97,7 +96,6 @@ internal sealed class SettingsPageInjector
         if (ui.GetComponent<FocusUiDriver>() == null)
             ui.gameObject.AddComponent<FocusUiDriver>();
 
-        Plugin.Log.LogInfo("[Chill Clock UI] page built");
     }
 
     public void OnActivated(SettingUI ui)
@@ -161,7 +159,6 @@ internal sealed class SettingsPageInjector
             if (ReadField<InteractableUI>(candidate, "_creditsInteractableUI") == null)
                 continue;
 
-            Plugin.Log.LogInfo("[Chill Clock UI] SettingUI found: " + candidate.name);
             EnsureBuilt(candidate);
             return;
         }
@@ -175,7 +172,6 @@ internal sealed class SettingsPageInjector
             throw new InvalidOperationException("General/Credits page fields missing");
 
         _toggleTemplate = FindToggleTemplate(ui);
-        Plugin.Log.LogInfo("[Chill Clock UI] toggle template found: " + (_toggleTemplate != null));
 
         _tabObject = Object.Instantiate(credits.gameObject);
         _tabObject.name = "ChillClockTab";

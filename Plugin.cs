@@ -44,11 +44,9 @@ public sealed class Plugin : BaseUnityPlugin
     private Bulbul.PomodoroService _pomodoroServiceInstance;
     private Harmony _harmony = null!;
     private bool _loggedServiceMissing;
-    private bool _vanillaProbeDone;
     private bool _subscribed;
     private CompositeDisposable _subscriptions;
     private float _nextCoreTick;
-    private float _nextFocusStatusLog;
     private bool _pendingDistractionVoice;
     private bool _pendingTaskManagerVoice;
     private bool _pendingExitVoice;
@@ -129,14 +127,11 @@ public sealed class Plugin : BaseUnityPlugin
         _voiceManager = new VoiceManager(hostObject);
         _guard.OnWindowMinimized += OnWindowMinimized;
         _closeGuard.OnCloseBlocked = () => _pendingExitVoice = true;
-        Logger.LogInfo("[Chill Clock] host created in Awake");
-
         try
         {
             _harmony = new Harmony(Guid);
             var setup = AccessTools.Method(typeof(Bulbul.SettingUI), "Setup");
             var activate = AccessTools.Method(typeof(Bulbul.SettingUI), "Activate");
-            Logger.LogInfo("Patch targets -> Setup: " + (setup != null) + ", Activate: " + (activate != null));
 
             if (setup != null)
                 _harmony.Patch(setup, postfix: PatchMethod("FocusWhitelistSetupPatch", "Postfix"));
@@ -154,22 +149,6 @@ public sealed class Plugin : BaseUnityPlugin
             PatchCountup(countup, "PlayOrPauseCountupTimer", "CountupTogglePatch", true);
             PatchCountup(countup, "ResetTimer", "CountupResetPatch", true);
             PatchCountup(countup, "CompleteCountupTimer", "CountupCompletePatch", false);
-
-            // 只读诊断：把游戏自己下发的"动作 / 表情 / 转头"记进日志
-            var scenarioReader = AccessTools.TypeByName("Bulbul.ScenarioReader");
-            var changeMotion = scenarioReader == null
-                ? null
-                : AccessTools.Method(scenarioReader, "CommandChangeMotion");
-            Logger.LogInfo("Scenario motion probe -> " + (changeMotion != null));
-            if (changeMotion != null)
-                _harmony.Patch(changeMotion, postfix: PatchMethod("ScenarioMotionProbePatch", "Postfix"));
-
-            // 服务层探针：她自己的动作/表情/转头入口
-            var heroineService = AccessTools.TypeByName("Bulbul.HeroineService");
-            PatchProbe(heroineService, "ChangeHeroineAnimationForInteger", "Body");
-            PatchProbe(heroineService, "ChangeHeroineFacialAnimation", "Facial");
-            PatchProbe(heroineService, "ChangeLookScaleAnimation", "Look");
-            PatchProbe(heroineService, "ChangeHeroineAnimationImmediately", "Immediate");
 
             var reactionReady = AccessTools.Method(typeof(Bulbul.FacilityClickHeroine), "ReactionReady");
             if (reactionReady != null)
@@ -356,11 +335,6 @@ public sealed class Plugin : BaseUnityPlugin
             if (_focusActive)
             {
                 _guard.Tick();
-                if (now >= _nextFocusStatusLog)
-                {
-                    _nextFocusStatusLog = now + 10f;
-                    Logger.LogInfo("[Chill Clock] focus active, sweeping windows");
-                }
             }
             else if (IsPomodoroSessionActive())
             {
@@ -514,34 +488,14 @@ public sealed class Plugin : BaseUnityPlugin
         if (!_clickReaction.Value)
             return false;
         if (_voiceManager == null || !_voiceReminders.Value || !_masterEnabled.Value)
-        {
-            Logger.LogInfo("[Chill Clock] click reaction skipped: 语音功能已关闭");
             return false;
-        }
 
         // 只接管"玩家点击"，不碰她自发的 HeroineSelf
         if (reactionType != Bulbul.FacilityClickHeroine.ReactionType.Click)
-        {
-            Logger.LogInfo("[Chill Clock] click reaction skipped: 不是玩家点击 (" + reactionType + ")");
             return false;
-        }
 
         if (!HeroineActionBridge.CanTakeOverClickReaction())
-        {
-            Logger.LogInfo("[Chill Clock] click reaction skipped: " +
-                           (HeroineActionBridge.DescribeClickReactionBlocker() ?? "未知原因"));
             return false;
-        }
-
-        // 开一次机只做一次：这次点击不接管，让游戏自己走一遍反应。
-        // 日志里的 "game motion:" 会把游戏自己下发的 身体动作/表情/转头 记下来，
-        // 我们照着它对齐；顺便你也能亲眼对比一下两边是不是一个姿势。
-        if (!_vanillaProbeDone)
-        {
-            _vanillaProbeDone = true;
-            Logger.LogInfo("[Chill Clock] vanilla probe: 这次让游戏自己走，记录它的动作参数");
-            return false;
-        }
 
         var state = _focusActive
             ? "Work"
@@ -549,12 +503,8 @@ public sealed class Plugin : BaseUnityPlugin
 
         var result = _voiceManager.PlayClick(state);
         if (result != VoiceStartResult.Started)
-        {
-            Logger.LogInfo("[Chill Clock] click reaction skipped: 我们这边没播成 (" + result + ", state=" + state + ")");
             return false;
-        }
 
-        Logger.LogInfo("[Chill Clock] click reaction -> our line (" + state + ")");
         return true;
     }
 
@@ -588,19 +538,9 @@ public sealed class Plugin : BaseUnityPlugin
         return new HarmonyMethod(method);
     }
 
-    /// <summary>给 HeroineService 上的方法挂一个只记日志的前缀。</summary>
-    private void PatchProbe(Type type, string methodName, string patchMethodName)
-    {
-        var original = type == null ? null : AccessTools.Method(type, methodName);
-        Logger.LogInfo("Motion probe " + methodName + " -> " + (original != null));
-        if (original != null)
-            _harmony.Patch(original, prefix: PatchMethod("HeroineMotionProbePatch", patchMethodName));
-    }
-
     private void PatchPomodoro(Type type, string methodName, string patchTypeName, bool isPrefix)
     {
         var original = AccessTools.Method(type, methodName);
-        Logger.LogInfo("Pomodoro patch " + methodName + " -> " + (original != null));
         if (original != null)
         {
             var patch = PatchMethod(patchTypeName, isPrefix ? "Prefix" : "Postfix");
@@ -611,7 +551,6 @@ public sealed class Plugin : BaseUnityPlugin
     private void PatchCountup(Type type, string methodName, string patchTypeName, bool isPrefix)
     {
         var original = AccessTools.Method(type, methodName);
-        Logger.LogInfo("Countup patch " + methodName + " -> " + (original != null));
         if (original != null)
         {
             var patch = PatchMethod(patchTypeName, isPrefix ? "Prefix" : "Postfix");

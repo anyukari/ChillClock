@@ -121,11 +121,7 @@ internal static class HeroineActionBridge
     private static MethodInfo _isPlayingScenario;
 
     private static MethodInfo _getActionState;
-    private static Type _actionStateType;
     private static MethodInfo _getCurrentAnimation;
-    private static Type _animationTypeEnum;
-    private static object _useObjectController;
-    private static PropertyInfo _pDeskType;
     private static MethodInfo _changeLook;
     private static MethodInfo _lookInitSlowly;
     private static MethodInfo _initFacial;
@@ -312,33 +308,6 @@ internal static class HeroineActionBridge
         return true;
     }
 
-    /// <summary>
-    /// 返回当前挡住"接管点击反应"的第一条原因；全部通过返回 null。
-    /// 只用于诊断日志，不参与逻辑。
-    /// </summary>
-    public static string DescribeClickReactionBlocker()
-    {
-        if (IsScenarioPlaying())
-            return "游戏中正在放剧情/演出";
-        if (IsGameEndDirection())
-            return "正在走结束通话演出";
-        if (InvokeServiceFlag("IsLeaveChair"))
-            return "她正在离席";
-        if (InvokeServiceFlag("IsPlayingPomodoroAction"))
-            return "她正在做番茄钟动作";
-        if (InvokeServiceFlag("IsPlayingClickReactionAnimation"))
-            return "她还在上一次的点击反应动作里";
-        if (InvokeServiceFlag("IsSleeping"))
-            return "她睡着了";
-        if (IsGameVoiceBusy())
-            return "游戏自己的语音还在播";
-        if (!IsClickReactionFree())
-            return "反应状态机不是空闲";
-        if (!IsPossibleClickReaction())
-            return "游戏自己认为现在不能反应";
-        return null;
-    }
-
     /// <summary>她当前正在播的整套基础动作（AnimationType 的数值），读不到返回 -1。</summary>
     private static int GetCurrentAnimationType()
     {
@@ -410,27 +379,6 @@ internal static class HeroineActionBridge
         }
     }
 
-    /// <summary>桌上现在摆的是什么：0 Book / 1 Pc / 2 Report / 3 None，读不到返回 -1。</summary>
-    private static int GetDeskType()
-    {
-        if (_pDeskType == null && EnsureService() == null)
-            return -1;
-        if (_useObjectController == null || _pDeskType == null)
-            return -1;
-
-        try
-        {
-            var raw = _pDeskType.GetValue(_useObjectController);
-            return raw == null ? -1 : Convert.ToInt32(raw);
-        }
-        catch
-        {
-            _useObjectController = null;
-            _pDeskType = null;
-            return -1;
-        }
-    }
-
     /// <summary>念台词时"换成手势动作"的概率，其余时候她照旧干活、只转头。</summary>
     private const int GestureChancePercent = 20;
 
@@ -475,9 +423,6 @@ internal static class HeroineActionBridge
                 : null;
 
             _changeLook.Invoke(_service, new object[] { scale, seconds, ease });
-
-            if (look)
-                Plugin.Log.LogInfo("[Chill Clock] look: scale=" + scale + " seconds=" + seconds);
         }
         catch (Exception e)
         {
@@ -595,102 +540,15 @@ internal static class HeroineActionBridge
             EnsureService() != null)
         {
             var id = ids[Rng.Next(ids.Length)];
-            var before = CurrentAnimationName();
             try
             {
-                // 置位探针标记，别把我们自己的调用记成"游戏下发的动作"
-                UI.HeroineMotionProbePatch.Ours = true;
-                try
-                {
-                    _changeAnimation.Invoke(_service, new object[] { id });
-                }
-                finally
-                {
-                    UI.HeroineMotionProbePatch.Ours = false;
-                }
-
-                Plugin.Log.LogInfo("[Chill Clock] action: " + (emotion ?? "") +
-                                   " -> " + AnimationName(id) + "(" + id + ")" +
-                                   " state=" + ActionStateName(GetActionState()) +
-                                   " desk=" + DeskName(GetDeskType()) +
-                                   " was=" + before);
+                _changeAnimation.Invoke(_service, new object[] { id });
             }
             catch (Exception e)
             {
                 Plugin.Log.LogWarning("[Chill Clock] heroine animation failed: " + e.Message);
                 ResetService();
             }
-        }
-    }
-
-    /// <summary>把动作 id 翻成 AnimationType 里的名字，只给日志用。</summary>
-    private static string AnimationName(int id)
-    {
-        try
-        {
-            // ChangeHeroineAnimationForInteger 的参数是 int，枚举类型得从
-            // GetCurrentAnimationType() 的返回值上拿。
-            return _animationTypeEnum != null && _animationTypeEnum.IsEnum
-                ? (Enum.GetName(_animationTypeEnum, id) ?? "?")
-                : "?";
-        }
-        catch
-        {
-            return "?";
-        }
-    }
-
-    /// <summary>她当前播放的整套动画（AnimationType 的名字），只给日志用。</summary>
-    private static string CurrentAnimationName()
-    {
-        try
-        {
-            var value = GetCurrentAnimationType();
-            if (value < 0)
-                return "?";
-
-            return (Enum.GetName(_animationTypeEnum, value) ?? "?") + "(" + value + ")";
-        }
-        catch
-        {
-            return "?";
-        }
-    }
-
-    private static string ActionStateName(int value)
-    {
-        try
-        {
-            if (value < 0)
-                return "?";
-
-            var name = _actionStateType != null && _actionStateType.IsEnum
-                ? (Enum.GetName(_actionStateType, value) ?? "?")
-                : "?";
-            return name + "(" + value + ")";
-        }
-        catch
-        {
-            return "?";
-        }
-    }
-
-    private static string DeskName(int value)
-    {
-        try
-        {
-            if (value < 0)
-                return "?";
-
-            var type = _pDeskType?.PropertyType;
-            var name = type == null || !type.IsEnum
-                ? "?"
-                : (Enum.GetName(type, value) ?? "?");
-            return name + "(" + value + ")";
-        }
-        catch
-        {
-            return "?";
         }
     }
 
@@ -819,9 +677,6 @@ internal static class HeroineActionBridge
         _fScenarioReader = type.GetField("_scenarioReader", Instance);
         _isGameEndDirection = type.GetMethod("get_IsCurrentGameEndDirection", Instance);
         _getActionState = type.GetMethod("GetCurrentState", Instance);
-        _actionStateType = _getActionState?.ReturnType;
-        _useObjectController = null;
-        _pDeskType = null;
         return true;
     }
 
@@ -855,25 +710,10 @@ internal static class HeroineActionBridge
 
         var serviceType = service.GetType();
         _getCurrentAnimation = serviceType.GetMethod("GetCurrentAnimationType", Instance);
-        _animationTypeEnum = _getCurrentAnimation?.ReturnType;
         _changeLook = serviceType.GetMethod("ChangeLookScaleByManual", Instance);
         _lookInitSlowly = serviceType.GetMethod("LookInitSlowly", Instance);
         _initFacial = serviceType.GetMethod("InitHeroineFacial", Instance);
         _initFacialAfterDelay = serviceType.GetMethod("InitHeroineFacialAfterDelay", Instance);
-
-        // 桌面上现在摆的是什么（书 / 电脑 / 写字），用来判断她的工作姿势
-        try
-        {
-            var property = serviceType.GetProperty("HeroineUseObjectController", Instance);
-            var controller = property?.GetValue(service);
-            _useObjectController = controller;
-            _pDeskType = controller?.GetType().GetProperty("DeskType", Instance);
-        }
-        catch
-        {
-            _useObjectController = null;
-            _pDeskType = null;
-        }
 
         return _service;
     }
