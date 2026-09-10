@@ -130,6 +130,34 @@ internal static class Win32
         return ShowWindow(hWnd, SwMinimize);
     }
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    /// <summary>
+    /// 把前台焦点还给游戏窗口。
+    /// 收回（最小化）别的窗口时，Windows 会把焦点交给别人，游戏窗口随之失焦——
+    /// 而游戏自己的开场/结束演出是靠焦点驱动的，一旦失焦就会被中断。
+    /// </summary>
+    public static void RestoreGameFocus()
+    {
+        try
+        {
+            var hwnd = GetCurrentProcessMainWindow();
+            if (hwnd == IntPtr.Zero || GetForegroundWindow() == hwnd)
+                return;
+
+            SetForegroundWindow(hwnd);
+        }
+        catch
+        {
+            // 失败就算了，最多保持原样
+        }
+    }
+
     public static bool RestoreWindow(IntPtr hWnd)
     {
         return ShowWindow(hWnd, SwRestore);

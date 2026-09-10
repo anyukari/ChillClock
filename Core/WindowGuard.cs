@@ -29,7 +29,9 @@ public sealed class WindowGuard
             if (active)
             {
                 Plugin.Log.LogInfo("[Chill Clock] focus minimize started");
-                SweepMinimizeLocked(false, false);
+                // 初始扫描也要发声：玩家在开始专注前就开着的应用被收走时，同样该提醒
+                if (!HeroineActionBridge.IsGameSequenceBusy())
+                    SweepMinimizeLocked(false, true);
             }
             else
             {
@@ -45,6 +47,11 @@ public sealed class WindowGuard
             if (!FocusActive)
                 return;
 
+            // 游戏自己在演出（开场 / 结束通话）时先不收窗口：
+            // 收窗口会把前台焦点从游戏手里抢走，演出就断了。
+            if (HeroineActionBridge.IsGameSequenceBusy())
+                return;
+
             SweepMinimizeLocked(false, true);
             PruneDeadHandlesLocked();
         }
@@ -54,6 +61,9 @@ public sealed class WindowGuard
     {
         lock (_lock)
         {
+            if (HeroineActionBridge.IsGameSequenceBusy())
+                return;
+
             SweepMinimizeLocked(true, true);
             PruneDeadHandlesLocked();
         }
@@ -68,6 +78,7 @@ public sealed class WindowGuard
     private void SweepMinimizeLocked(bool taskManagerOnly, bool allowVoice)
     {
         var windows = Win32.EnumerateVisibleTopLevelWindows();
+        var hidAny = false;
         foreach (var window in windows)
         {
             if (taskManagerOnly && !window.IsTaskManager)
@@ -93,12 +104,17 @@ public sealed class WindowGuard
 
             if (Win32.HideWindow(window.Handle))
             {
+                hidAny = true;
                 _minimizedByUs.Add(window.Handle);
                 if (allowVoice)
                     OnWindowMinimized?.Invoke(window.ProcessName, false);
                 Plugin.Log.LogInfo("[Chill Clock] minimized window: " + window.ProcessName);
             }
         }
+
+        // 最小化别的窗口会让 Windows 把焦点交给别人，这里把焦点还给游戏。
+        if (hidAny)
+            Win32.RestoreGameFocus();
     }
 
     private void EndFocusLocked()

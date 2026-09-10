@@ -28,6 +28,7 @@ public sealed class Plugin : BaseUnityPlugin
     private ConfigEntry<bool> _hideUiDuringFocus = null!;
     private ConfigEntry<bool> _blockGameExitOnFocus = null!;
     private ConfigEntry<bool> _voiceReminders = null!;
+    private ConfigEntry<bool> _heroineReactions = null!;
     private WhitelistStore _store = null!;
     private WindowGuard _guard = null!;
     private FocusSessionWatcher _watcher = null!;
@@ -50,6 +51,15 @@ public sealed class Plugin : BaseUnityPlugin
     private bool _pendingTaskManagerVoice;
     private bool _pendingExitVoice;
     private bool _pendingRestVoice;
+    private float _nextAmbientVoiceTime;
+    private float _nextRestChatTime;
+    private float _voiceGraceUntil;
+
+    /// <summary>
+    /// 专注刚开场时游戏自己会播一句（比如「开始工作了」）。这段时间先别插话，
+    /// 否则要么盖掉它，要么让它的 PlayVoice 被静默丢弃。
+    /// </summary>
+    private const float FocusVoiceGraceSeconds = 6f;
 
     private void Awake()
     {
@@ -69,6 +79,9 @@ public sealed class Plugin : BaseUnityPlugin
         _voiceReminders = Config.Bind(
             "Focus", "VoiceReminders", true,
             "走神或尝试退出时是否播放聪音的语音提醒。");
+        _heroineReactions = Config.Bind(
+            "Focus", "HeroineReactions", true,
+            "念台词时是否让聪音配合动作和表情。关掉后本模组完全不碰游戏的动作/表情/口型系统。");
 
         var pluginDirectory = Path.GetDirectoryName(typeof(Plugin).Assembly.Location);
         var whitelistPath = Path.Combine(pluginDirectory ?? ".", "FocusWhitelist.txt");
@@ -153,7 +166,57 @@ public sealed class Plugin : BaseUnityPlugin
             IsPomodoroSessionActive() &&
             _hideUiDuringFocus.Value);
         ProcessVoiceReminders();
+        TickAmbientVoice();
+        HeroineActionBridge.Enabled = _heroineReactions.Value;
         TickCoreHost();
+    }
+
+    /// <summary>
+    /// 专注中的定时闲聊 / 休息中的闲聊。间隔刻意拉得很开，避免打断专注。
+    /// </summary>
+    private void TickAmbientVoice()
+    {
+        if (_voiceManager == null || !_voiceReminders.Value || !_masterEnabled.Value)
+            return;
+
+        var now = Time.realtimeSinceStartup;
+
+        if (_focusActive)
+        {
+            _nextRestChatTime = 0f;
+            if (_nextAmbientVoiceTime <= 0f)
+            {
+                _nextAmbientVoiceTime = now + 8f * 60f;
+                return;
+            }
+            if (now >= _nextAmbientVoiceTime)
+            {
+                _nextAmbientVoiceTime = now + UnityEngine.Random.Range(12f, 20f) * 60f;
+                _voiceManager.PlayAmbient();
+            }
+            return;
+        }
+
+        if (IsPomodoroSessionActive())
+        {
+            _nextAmbientVoiceTime = 0f;
+            if (_nextRestChatTime <= 0f)
+            {
+                _nextRestChatTime = now + 60f;
+                return;
+            }
+            if (now >= _nextRestChatTime)
+            {
+                _nextRestChatTime = now + UnityEngine.Random.Range(2f, 4f) * 60f;
+                _voiceManager.PlayRestReminder();
+            }
+            return;
+        }
+
+        // 既不在专注也不在休息：一句都不说。
+        // 顺手把计时器清零，免得下次进入专注时因为计时器早就过期而立刻开口。
+        _nextRestChatTime = 0f;
+        _nextAmbientVoiceTime = 0f;
     }
 
     private void OnWindowMinimized(string processName, bool isTaskManager)
@@ -166,47 +229,57 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void ProcessVoiceReminders()
     {
+        // 订阅在某些场景切换后会丢，这里每帧自愈一次
+        if (_guard != null && _guard.OnWindowMinimized == null)
+            _guard.OnWindowMinimized += OnWindowMinimized;
+
         if (_voiceManager == null || !_voiceReminders.Value)
         {
-            _pendingDistractionVoice = false;
-            _pendingTaskManagerVoice = false;
-            _pendingExitVoice = false;
-            _pendingRestVoice = false;
+            ClearPendingVoices();
             return;
         }
 
+        // 专注刚开场：让游戏先说完它自己的那句
+        if (Time.realtimeSinceStartup < _voiceGraceUntil)
+            return;
+
         if (_pendingExitVoice)
         {
-            _pendingExitVoice = false;
-            _pendingTaskManagerVoice = false;
-            _pendingDistractionVoice = false;
-            _pendingRestVoice = false;
-            _voiceManager.PlayExitAttempt();
+            ConsumeVoice(_voiceManager.PlayExitAttempt());
             return;
         }
 
         if (_pendingTaskManagerVoice)
         {
-            _pendingTaskManagerVoice = false;
-            _pendingDistractionVoice = false;
-            _pendingRestVoice = false;
-            _voiceManager.PlayTaskManager();
+            ConsumeVoice(_voiceManager.PlayTaskManager());
             return;
         }
 
         if (_pendingRestVoice)
         {
-            _pendingRestVoice = false;
-            _pendingDistractionVoice = false;
-            _voiceManager.PlayRestReminder();
+            ConsumeVoice(_voiceManager.PlayRestReminder());
             return;
         }
 
         if (_pendingDistractionVoice)
-        {
-            _pendingDistractionVoice = false;
-            _voiceManager.PlayDistraction();
-        }
+            ConsumeVoice(_voiceManager.PlayDistraction());
+    }
+
+    /// <summary>Deferred 表示这次没播成，保留待播标记下一帧再试。</summary>
+    private void ConsumeVoice(VoiceStartResult result)
+    {
+        if (result == VoiceStartResult.Deferred)
+            return;
+
+        ClearPendingVoices();
+    }
+
+    private void ClearPendingVoices()
+    {
+        _pendingDistractionVoice = false;
+        _pendingTaskManagerVoice = false;
+        _pendingExitVoice = false;
+        _pendingRestVoice = false;
     }
 
     private void UpdateCloseGuard()
@@ -279,6 +352,7 @@ public sealed class Plugin : BaseUnityPlugin
             {
                 _focusActive = true;
                 _guard.SetFocusActive(true);
+                _voiceGraceUntil = Time.realtimeSinceStartup + FocusVoiceGraceSeconds;
                 Logger.LogInfo("[Chill Clock] focus state -> Work active (poll)");
             }
         }
@@ -333,6 +407,8 @@ public sealed class Plugin : BaseUnityPlugin
 
         _focusActive = active;
         _guard.SetFocusActive(active);
+        if (active)
+            _voiceGraceUntil = Time.realtimeSinceStartup + FocusVoiceGraceSeconds;
         Logger.LogInfo("[Chill Clock] event focus state -> " + (active ? "Work active" : "ended"));
     }
 
@@ -376,16 +452,21 @@ public sealed class Plugin : BaseUnityPlugin
 
     internal bool ShouldBlockGameExit()
     {
-        return _masterEnabled.Value &&
-               _blockGameExitOnFocus.Value &&
-               (_focusActive || IsPomodoroSessionActive());
+        if (!_masterEnabled.Value || !_blockGameExitOnFocus.Value)
+            return false;
+        if (!_focusActive && !IsPomodoroSessionActive())
+            return false;
+
+        // 游戏自己正在走"结束通话"演出时放行，否则它的收尾流程会被我们卡住
+        if (HeroineActionBridge.IsGameEndingCall())
+            return false;
+
+        return true;
     }
 
     private bool OnWantsToQuit()
     {
-        if (!_masterEnabled.Value || !_blockGameExitOnFocus.Value)
-            return true;
-        if (!_focusActive && !IsPomodoroSessionActive())
+        if (!ShouldBlockGameExit())
             return true;
 
         Logger.LogWarning("[Chill Clock] 番茄钟会话中已拦截退出请求");

@@ -1,0 +1,40 @@
+File	Japanese	Chinese	English	Emotion	Seq	Order
+New_Distraction_01.wav	ちょっと、画面の向こうで何してるの？	喂，你在屏幕那边干什么呢？	What are you doing over there?	Confused		
+New_Distraction_02.wav	また違うアプリ開いたでしょ。ちゃんと戻ってきて。	你又开别的应用了吧？乖乖回来。	You opened another app again, didn't you? Come back.	Fun		
+New_Distraction_03.wav	こら、よそ見しないの。今は作業の時間だよ。	喂，不许东张西望。现在是工作时间。	Hey, don't look away. It's work time.	Angry		
+New_Distraction_04.wav	集中できないなら、私がそばで見ててあげる。	如果集中不了，我就在旁边看着你。	If you can't focus, I'll watch over you.	Happy		
+New_Distraction_05.wav	ふふ、逃げても無駄だよ。ちゃんと見てるから。	呵呵，逃也没用哦。我一直看着你呢。	Hehe, running away won't help. I'm watching.	Fun		
+New_Distraction_06.wav	今サボったら、あとで一緒に休憩できないよ？	现在偷懒的话，之后就不能一起休息了哦？	If you slack now, we can't rest together later, okay?	Angry		
+New_Distraction_07.wav	ちょっと目を離した隙に…もう。戻ってきて。	才刚没看一会儿……真是的，快回来。	I looked away for a second... geez. Come back.	Confused		
+New_Distraction_08.wav	君が集中してるところ、ちゃんと見たいんだ。	我想好好看看你专注的样子。	I want to see you when you're focused.	Happy		
+New_Gentle_01.wav	ねえ、私と一緒に頑張ろ？	呐，和我一起加油吧？	Hey, let's do our best together?	Happy		
+New_Gentle_02.wav	君ならできるって知ってるよ。あと少し、ね？	我知道你做得到。再坚持一下，好吗？	I know you can do it. Just a little more, okay?	Happy		
+New_Gentle_03.wav	集中できたら、あとでたくさん褒めてあげる。	专心完成的话，之后我会好好夸你。	If you focus, I'll praise you a lot later.	Happy		
+New_Gentle_04.wav	私も頑張ってるんだから、君も頑張ってよ。	我也在努力，所以你也要加油哦。	I'm working hard too, so you work hard as well.	Happy		
+New_Gentle_05.wav	そばにいるよ。だから、安心して集中して。	我在你身边。所以安心专注吧。	I'm right here. So relax and focus.	Relaxed		
+New_TaskManager_01.wav	こら。タスクマネージャーなんて開いちゃダメ。	喂，不可以打开任务管理器。	Hey, don't open Task Manager.	Angry		
+New_TaskManager_02.wav	それでゲームを閉じて逃げるつもり？許さないよ。	你想关掉游戏逃跑？我可不允许。	You're going to close the game and run? I won't allow that.	Angry		
+New_TaskManager_03.wav	ずるいことしないの。ちゃんと最後まで作業して。	不许耍赖。好好做到最后。	Don't cheat. Work properly until the end.	Angry		
+New_TaskManager_04.wav	そんなの開くくらいなら、あと一行進めてよ。	有功夫开那个，不如再推进一行。	If you have time to open that, move one more line forward.	Confused		
+New_Exit_01.wav	どこ行くの？まだ集中タイムは終わってないよ。	你要去哪？专注时间还没结束哦。	Where are you going? Focus time isn't over.	Confused		
+New_Exit_02.wav	逃げるのはダメ。ちゃんと戻ってきて。	不可以逃跑。乖乖回来。	Running away is not okay. Come back.	Angry		
+New_Exit_03.wav	閉じちゃったら、私ひとりになっちゃうよ？	你要是关掉，我就剩一个人了哦？	If you close it, I'll be all alone, you know?	Sad		
+New_Exit_04.wav	だめだよ。私と一緒に最後まで頑張ろ？	不行。和我一起坚持到最后吧？	No. Let's work together until the end, okay?	Sad		
+New_Rest_01.wav	休憩は短めにね。ずっと休んでたら、私もつまらないよ。	休息要短一点哦。一直休息的话，我也会无聊的。	Keep your break short. If you rest forever, I'll be bored.	Relaxed		
+New_Rest_02.wav	休憩中でも、あんまりダラダラしちゃダメだよ。	就算是休息，也不能太磨蹭哦。	Even during a break, don't laze around too much.	Relaxed		
+New_Rest_03.wav	水分補給したら、次の作業も一緒に頑張ろ？	补充水分后，下一段工作也一起加油吧？	After you hydrate, let's work hard on the next task together.	Happy		
+New_Rest_04.wav	ふぅ、休憩。でも、ほどほどにね。	呼——休息一下。不过也要适可而止哦。	Phew, a break. But in moderation, okay?	Relaxed		
+Voice_ClickHeroine_Word_Work_002.wav	集中できないの?	集中不了吗？	Can't focus?	Confused		
+Voice_ClickHeroine_Word_Work_004.wav	ほら、作業に集中。	来，专注工作。	Come on, focus on your work.	Angry		
+Voice_ClickHeroine_Word_Work_010.wav	集中させて欲しいな。	希望你能让我专注呢。	I want you to let me focus.	Angry		
+Voice_ClickHeroine_Word_Work_011.wav	作業中だってば	我都说了在工作。	I said I'm working.	Angry		
+Voice_ClickHeroine_Word_Work_016.wav	作業に戻ろっか	回去吧。	Let's get back to work.	Happy		
+Voice_ClickHeroine_Word_Work_017.wav	手抜きはダメだよ。	不可以偷懒哦。	No slacking off.	Angry		
+Voice_ClickHeroine_Word_Work_020.wav	ちゃんと進めてる?	有好好推进吗？	Are you making progress?	Confused		
+Voice_ClickHeroine_Word_Work_021.wav	ほら、集中しよう、ね?	来，专注吧，好吗？	Come on, let's focus, okay?	Angry		
+Voice_ClickHeroine_Word_Work_022.wav	私も頑張るから、君も頑張ろう	我也会努力，你也加油吧。	I'll work hard too, so let's both do our best.	Happy		
+Voice_ClickHeroine_Word_Work_023.wav	今は目の前の作業に集中しよう	现在专注于眼前的工作吧。	Let's focus on the task in front of us.	Happy		
+Voice_ClickHeroine_Word_Work_Evening_001.wav	今サボると夜が辛いよ。	现在偷懒的话，晚上会很难受哦。	If you slack now, tonight will be rough.	Angry		
+Voice_PomodoroFinish_Talk_19_Reaction_001.wav	ちゃ、ちゃんと作業しようよ。	好、好好工作吧。	H-hey, let's work properly.	Angry		
+Voice_ClickHeroine_Word_Normal_021.wav	君と一緒が一番はかどるよ	和你一起效率最高。	I get the most done when I'm with you.	Happy		
+Voice_ClickHeroine_Word_Normal_023.wav	一緒に作業したいなダメ?	想一起工作，不行吗？	I want to work together. Is that okay?	Shy		

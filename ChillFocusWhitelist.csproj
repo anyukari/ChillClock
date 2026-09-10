@@ -18,7 +18,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Voices\*.wav" />
+    <EmbeddedResource Include="Voices\*.wav;Voices\*.tsv" />
   </ItemGroup>
 
   <ItemGroup>
@@ -66,6 +66,12 @@
     </Reference>
     <Reference Include="UnityEngine.UIModule" Private="false">
       <HintPath>$(GameDir)\Chill With You_Data\Managed\UnityEngine.UIModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UnityWebRequestModule" Private="false">
+      <HintPath>$(GameDir)\Chill With You_Data\Managed\UnityEngine.UnityWebRequestModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UnityWebRequestAudioModule" Private="false">
+      <HintPath>$(GameDir)\Chill With You_Data\Managed\UnityEngine.UnityWebRequestAudioModule.dll</HintPath>
     </Reference>
     <Reference Include="VContainer" Private="false">
       <HintPath>$(GameDir)\Chill With You_Data\Managed\VContainer.dll</HintPath>
