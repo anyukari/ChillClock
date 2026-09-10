@@ -185,6 +185,11 @@ public sealed class Plugin : BaseUnityPlugin
                     Logger.LogInfo("[Chill Clock] focus active, sweeping windows");
                 }
             }
+            else if (IsPomodoroSessionActive())
+            {
+                // 休息阶段不再最小化普通应用，但继续关闭任务管理器。
+                _guard.TickTaskManagerOnly();
+            }
 
             var known = _watcher.TryGetWorkActive(out var workActive);
             if (!known)

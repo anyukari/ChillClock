@@ -27,7 +27,7 @@ public sealed class WindowGuard
             if (active)
             {
                 Plugin.Log.LogInfo("[Chill Clock] focus minimize started");
-                SweepMinimizeLocked();
+                SweepMinimizeLocked(false);
             }
             else
             {
@@ -43,7 +43,16 @@ public sealed class WindowGuard
             if (!FocusActive)
                 return;
 
-            SweepMinimizeLocked();
+            SweepMinimizeLocked(false);
+            PruneDeadHandlesLocked();
+        }
+    }
+
+    public void TickTaskManagerOnly()
+    {
+        lock (_lock)
+        {
+            SweepMinimizeLocked(true);
             PruneDeadHandlesLocked();
         }
     }
@@ -54,11 +63,13 @@ public sealed class WindowGuard
             EndFocusLocked();
     }
 
-    private void SweepMinimizeLocked()
+    private void SweepMinimizeLocked(bool taskManagerOnly)
     {
         var windows = Win32.EnumerateVisibleTopLevelWindows();
         foreach (var window in windows)
         {
+            if (taskManagerOnly && !window.IsTaskManager)
+                continue;
             if (window.IsShellWindow)
                 continue;
             if (window.ProcessId == (uint)Win32.CurrentProcessId)
@@ -71,7 +82,10 @@ public sealed class WindowGuard
                 continue;
 
             if (window.IsTaskManager)
+            {
                 Win32.RequestClose(window.Handle);
+                continue;
+            }
 
             if (Win32.HideWindow(window.Handle))
             {
