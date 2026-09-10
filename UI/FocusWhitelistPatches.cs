@@ -35,6 +35,28 @@ internal static class FocusWhitelistActivatePatch
     }
 }
 
+/// <summary>
+/// 点击聪音的反应。默认不接管（走游戏原逻辑）；打开 ClickReaction 后，
+/// 满足条件时用我们池子里的台词回应，并跳过游戏原本的反应。
+///
+/// 返回 true 表示已接管：把 __result 置 true 让点击流程以为"已响应"
+/// （否则它会走"现在点不动"的反馈），同时 return false 跳过原方法，
+/// 这样游戏自己的反应状态机不会被启动。
+/// </summary>
+internal static class ClickReactionPatch
+{
+    private static bool Prefix(
+        Bulbul.FacilityClickHeroine.ReactionType reactionType,
+        ref bool __result)
+    {
+        if (!Plugin.Instance.TryTakeOverClickReaction(reactionType))
+            return true;
+
+        __result = true;
+        return false;
+    }
+}
+
 internal static class PomodoroStartPatch
 {
     private static void Prefix(Bulbul.PomodoroService __instance)

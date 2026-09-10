@@ -152,6 +152,12 @@ internal sealed class VoiceManager
     public VoiceStartResult PlayRestReminder() => Play("Rest", 30f);
     public VoiceStartResult PlayAmbient() => Play("Ambient", 45f);
 
+    /// <summary>
+    /// 点击聪音时的反应台词。state 取 Work / Break / Normal，
+    /// 对应她此刻是在工作、休息还是普通待机；再按当前时段筛选。
+    /// </summary>
+    public VoiceStartResult PlayClick(string state) => Play("Click_" + state, 8f);
+
     private VoiceStartResult Play(string trigger, float cooldown)
     {
         if (_source == null || _runner == null || _chainRunning || _source.isPlaying)
@@ -197,11 +203,42 @@ internal sealed class VoiceManager
         return VoiceStartResult.Started;
     }
 
-    private static string Pick(List<string> pool)
+    /// <summary>
+    /// 从候选池里抽一条，优先当前时段的专属台词。
+    /// 别的时段的台词不会被抽到；一条都不匹配时才退回"未标时段"的中性台词。
+    /// </summary>
+    private string Pick(List<string> pool)
     {
         if (pool.Count == 0)
             return null;
-        return pool[UnityEngine.Random.Range(0, pool.Count)];
+
+        var now = HeroineActionBridge.GetTimeOfDay();
+        if (!string.IsNullOrEmpty(now))
+        {
+            var matches = new List<string>();
+            foreach (var file in pool)
+            {
+                if (_catalog.TryGetValue(file, out var line) &&
+                    !string.IsNullOrEmpty(line.Time) &&
+                    string.Equals(line.Time, now, StringComparison.OrdinalIgnoreCase))
+                {
+                    matches.Add(file);
+                }
+            }
+
+            if (matches.Count > 0)
+                return matches[UnityEngine.Random.Range(0, matches.Count)];
+        }
+
+        var neutral = new List<string>();
+        foreach (var file in pool)
+        {
+            if (_catalog.TryGetValue(file, out var line) && string.IsNullOrEmpty(line.Time))
+                neutral.Add(file);
+        }
+
+        var source = neutral.Count > 0 ? neutral : pool;
+        return source[UnityEngine.Random.Range(0, source.Count)];
     }
 
     private IEnumerator PlayChain(List<string> files)
@@ -551,7 +588,9 @@ internal sealed class VoiceManager
                 Emotion = parts[4].Trim(),
                 Trigger = parts.Length > 5 ? parts[5].Trim() : string.Empty,
                 SeqGroup = parts.Length > 6 ? parts[6].Trim() : string.Empty,
-                SeqOrder = parts.Length > 7 && int.TryParse(parts[7].Trim(), out var order) ? order : 0
+                SeqOrder = parts.Length > 7 && int.TryParse(parts[7].Trim(), out var order) ? order : 0,
+                // 第 9 列（可选）：Morning / Noon / Evening / Night，留空表示任何时段都能用
+                Time = parts.Length > 8 ? parts[8].Trim() : string.Empty
             };
             _catalog[line.File] = line;
         }
@@ -682,6 +721,7 @@ internal sealed class VoiceManager
         public string Trigger;
         public string SeqGroup;
         public int SeqOrder;
+        public string Time;
     }
 }
 

@@ -29,6 +29,7 @@ public sealed class Plugin : BaseUnityPlugin
     private ConfigEntry<bool> _blockGameExitOnFocus = null!;
     private ConfigEntry<bool> _voiceReminders = null!;
     private ConfigEntry<bool> _heroineReactions = null!;
+    private ConfigEntry<bool> _clickReaction = null!;
     private WhitelistStore _store = null!;
     private WindowGuard _guard = null!;
     private FocusSessionWatcher _watcher = null!;
@@ -82,6 +83,9 @@ public sealed class Plugin : BaseUnityPlugin
         _heroineReactions = Config.Bind(
             "Focus", "HeroineReactions", true,
             "念台词时是否让聪音配合动作和表情。关掉后本模组完全不碰游戏的动作/表情/口型系统。");
+        _clickReaction = Config.Bind(
+            "Focus", "ClickReaction", false,
+            "点击聪音时是否也用扩充的台词回应（会跳过游戏原本的那句反应）。按她当前状态+时段挑选。");
 
         var pluginDirectory = Path.GetDirectoryName(typeof(Plugin).Assembly.Location);
         var whitelistPath = Path.Combine(pluginDirectory ?? ".", "FocusWhitelist.txt");
@@ -138,6 +142,10 @@ public sealed class Plugin : BaseUnityPlugin
             PatchCountup(countup, "PlayOrPauseCountupTimer", "CountupTogglePatch", true);
             PatchCountup(countup, "ResetTimer", "CountupResetPatch", true);
             PatchCountup(countup, "CompleteCountupTimer", "CountupCompletePatch", false);
+
+            var reactionReady = AccessTools.Method(typeof(Bulbul.FacilityClickHeroine), "ReactionReady");
+            if (reactionReady != null)
+                _harmony.Patch(reactionReady, prefix: PatchMethod("ClickReactionPatch", "Prefix"));
 
             var patched = _harmony.GetPatchedMethods()
                 .Select(m => m.DeclaringType?.Name + "." + m.Name)
@@ -461,6 +469,35 @@ public sealed class Plugin : BaseUnityPlugin
         if (HeroineActionBridge.IsGameEndingCall())
             return false;
 
+        return true;
+    }
+
+    /// <summary>
+    /// 点击反应的接管判断：开关、状态、以及我们的候选池都得满足。
+    /// 任一条不满足就返回 false，让游戏走它自己的反应。
+    /// </summary>
+    internal bool TryTakeOverClickReaction(Bulbul.FacilityClickHeroine.ReactionType reactionType)
+    {
+        if (!_clickReaction.Value || _voiceManager == null ||
+            !_voiceReminders.Value || !_masterEnabled.Value)
+            return false;
+
+        // 只接管"玩家点击"，不碰她自发的 HeroineSelf
+        if (reactionType != Bulbul.FacilityClickHeroine.ReactionType.Click)
+            return false;
+
+        if (!HeroineActionBridge.CanTakeOverClickReaction())
+            return false;
+
+        var state = _focusActive
+            ? "Work"
+            : (IsPomodoroSessionActive() ? "Break" : "Normal");
+
+        var result = _voiceManager.PlayClick(state);
+        if (result != VoiceStartResult.Started)
+            return false;
+
+        Logger.LogInfo("[Chill Clock] click reaction -> our line (" + state + ")");
         return true;
     }
 

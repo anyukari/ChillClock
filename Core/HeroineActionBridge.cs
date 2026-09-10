@@ -92,6 +92,13 @@ internal static class HeroineActionBridge
     private static MethodInfo _isPlayingScenario;
     private static MethodInfo _isGameEndDirection;
 
+    private static MonoBehaviour _clickHeroine;
+    private static FieldInfo _fTimeOfDay;
+    private static FieldInfo _fClickMainState;
+    private static MethodInfo _getTimeOfDay;
+    private static object _timeOfDayProvider;
+    private static float _nextTimeOfDayLookup;
+
     private static object _voiceManager;
     private static IDictionary _voiceClips;
     private static MethodInfo _voiceManagerPlay;
@@ -146,6 +153,99 @@ internal static class HeroineActionBridge
     public static bool IsGameEndingCall()
     {
         return EnsureHeroineAi() && IsGameEndDirection();
+    }
+
+    /// <summary>
+    /// 游戏当前时段：Morning / Noon / Evening / Night，拿不到返回 null。
+    /// 来源是 Bulbul.FacilityClickHeroine._timeOfDayProvider.GetCurrentTimeOfDayType()。
+    /// </summary>
+    public static string GetTimeOfDay()
+    {
+        try
+        {
+            if (_timeOfDayProvider == null || _getTimeOfDay == null)
+            {
+                if (Time.realtimeSinceStartup < _nextTimeOfDayLookup)
+                    return null;
+
+                if (!EnsureClickHeroine())
+                {
+                    _nextTimeOfDayLookup = Time.realtimeSinceStartup + 2f;
+                    return null;
+                }
+
+                _timeOfDayProvider = _fTimeOfDay.GetValue(_clickHeroine);
+                if (_timeOfDayProvider == null)
+                    return null;
+
+                _getTimeOfDay = _timeOfDayProvider.GetType().GetMethod("GetCurrentTimeOfDayType", Instance);
+                if (_getTimeOfDay == null)
+                    return null;
+            }
+
+            var value = _getTimeOfDay.Invoke(_timeOfDayProvider, null);
+            return value?.ToString();
+        }
+        catch
+        {
+            _clickHeroine = null;
+            _timeOfDayProvider = null;
+            _getTimeOfDay = null;
+            _nextTimeOfDayLookup = Time.realtimeSinceStartup + 2f;
+            return null;
+        }
+    }
+
+    private static bool EnsureClickHeroine()
+    {
+        if (_clickHeroine != null)
+            return true;
+
+        _clickHeroine = FindBehaviour("Bulbul.FacilityClickHeroine");
+        if (_clickHeroine == null)
+            return false;
+
+        var type = _clickHeroine.GetType();
+        _fTimeOfDay = type.GetField("_timeOfDayProvider", Instance);
+        _fClickMainState = type.GetField("_mainState", Instance);
+        return true;
+    }
+
+    /// <summary>点击反应是否空闲（FacilityClickHeroine._mainState == 0）。</summary>
+    public static bool IsClickReactionFree()
+    {
+        if (!EnsureClickHeroine() || _fClickMainState == null)
+            return false;
+
+        try
+        {
+            return _fClickMainState.GetValue(_clickHeroine) is int state && state == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>游戏自己判断"现在能响应点击"。</summary>
+    public static bool IsPossibleClickReaction()
+    {
+        return InvokeServiceFlag("IsPossibleClickHeroineReaction");
+    }
+
+    /// <summary>
+    /// 接管这次点击反应：播放我们池子里的台词。
+    /// 返回 true 表示已经接管（调用方跳过游戏原本的反应流程）。
+    /// </summary>
+    public static bool CanTakeOverClickReaction()
+    {
+        if (IsGameSequenceBusy() || IsGameVoiceBusy())
+            return false;
+        if (!IsClickReactionFree())
+            return false;
+        if (!IsPossibleClickReaction())
+            return false;
+        return true;
     }
 
     /// <summary>播放一个情绪对应的身体动作，并同步一个安全的表情。</summary>
