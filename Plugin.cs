@@ -44,6 +44,7 @@ public sealed class Plugin : BaseUnityPlugin
     private Bulbul.PomodoroService _pomodoroServiceInstance;
     private Harmony _harmony = null!;
     private bool _loggedServiceMissing;
+    private bool _vanillaProbeDone;
     private bool _subscribed;
     private CompositeDisposable _subscriptions;
     private float _nextCoreTick;
@@ -86,6 +87,17 @@ public sealed class Plugin : BaseUnityPlugin
         _clickReaction = Config.Bind(
             "Focus", "ClickReaction", true,
             "点击聪音时是否也用扩充的台词回应（会跳过游戏原本的那句反应）。按她当前状态+时段挑选。");
+
+        // 老版本的 cfg 是早先写下的，新加的项（比如 ClickReaction）不会自动出现。
+        // 这里重写一次，保证配置文件里能看到所有开关。
+        try
+        {
+            Config.Save();
+        }
+        catch (Exception e)
+        {
+            Logger.LogWarning("[Chill Clock] config save failed: " + e.Message);
+        }
 
         var pluginDirectory = Path.GetDirectoryName(typeof(Plugin).Assembly.Location);
         var whitelistPath = Path.Combine(pluginDirectory ?? ".", "FocusWhitelist.txt");
@@ -506,6 +518,16 @@ public sealed class Plugin : BaseUnityPlugin
         {
             Logger.LogInfo("[Chill Clock] click reaction skipped: " +
                            (HeroineActionBridge.DescribeClickReactionBlocker() ?? "未知原因"));
+            return false;
+        }
+
+        // 开一次机只做一次：这次点击不接管，让游戏自己走一遍反应。
+        // 日志里的 "game motion:" 会把游戏自己下发的 身体动作/表情/转头 记下来，
+        // 我们照着它对齐；顺便你也能亲眼对比一下两边是不是一个姿势。
+        if (!_vanillaProbeDone)
+        {
+            _vanillaProbeDone = true;
+            Logger.LogInfo("[Chill Clock] vanilla probe: 这次让游戏自己走，记录它的动作参数");
             return false;
         }
 
