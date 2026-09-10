@@ -84,7 +84,7 @@ public sealed class Plugin : BaseUnityPlugin
             "Focus", "HeroineReactions", true,
             "念台词时是否让聪音配合动作和表情。关掉后本模组完全不碰游戏的动作/表情/口型系统。");
         _clickReaction = Config.Bind(
-            "Focus", "ClickReaction", false,
+            "Focus", "ClickReaction", true,
             "点击聪音时是否也用扩充的台词回应（会跳过游戏原本的那句反应）。按她当前状态+时段挑选。");
 
         var pluginDirectory = Path.GetDirectoryName(typeof(Plugin).Assembly.Location);
