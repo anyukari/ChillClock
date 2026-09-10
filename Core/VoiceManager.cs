@@ -65,7 +65,6 @@ internal sealed class VoiceManager
     private bool _chainRunning;
     private string _lastPlayed;
     private float _nextAttempt;
-    private string _pendingClickState;
     private bool _lookingAtPlayer;
 
     public VoiceManager(GameObject host)
@@ -197,8 +196,6 @@ internal sealed class VoiceManager
     public VoiceStartResult PlayClick(string state)
     {
         var result = Play("Click_" + state, 8f);
-        if (result == VoiceStartResult.Started)
-            _pendingClickState = state;
         return result;
     }
 
@@ -399,25 +396,10 @@ internal sealed class VoiceManager
         if (!_catalog.TryGetValue(fileName, out var line))
             return;
 
-        // 点击反应单独走一条：大部分时候她只是停下手里的活回头看你一眼，
-        // 用游戏自己的桌面反应动作，而不是每次都换一个手势。
-        if (_pendingClickState != null)
-        {
-            var state = _pendingClickState;
-            _pendingClickState = null;
-            HeroineActionBridge.PlayClickReaction(state, line.Emotion);
-
-            // "一边干活一边回头说话"：只转头部，身体继续做她的事
-            if (!_lookingAtPlayer)
-            {
-                _lookingAtPlayer = true;
-                HeroineActionBridge.SetLookAtPlayer(true);
-            }
-        }
-        else
-        {
-            HeroineActionBridge.Play(line.Emotion);
-        }
+        // 念台词时按游戏自己的规则来：不动身体动作（她继续干手头的活），
+        // 只换表情 + 转头（都在 Play 里做了），链子结束时统一把视线放回去。
+        HeroineActionBridge.Play(line.Emotion);
+        _lookingAtPlayer = true;
 
         // 英文还没翻译完时，英语用户至少能看到日文原文，不至于空字幕
         var english = string.IsNullOrEmpty(line.English) ? line.Japanese : line.English;

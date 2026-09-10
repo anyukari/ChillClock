@@ -424,8 +424,8 @@ internal static class HeroineActionBridge
         }
     }
 
-    /// <summary>点击反应里"换个手势做动作"的概率（其余时候她照旧干活，只回头）。</summary>
-    private const int ClickGestureChance = 20;
+    /// <summary>念台词时"换成手势动作"的概率，其余时候她照旧干活、只转头。</summary>
+    private const int GestureChancePercent = 20;
 
     /// <summary>
     /// 点击时转头的幅度。游戏自己的数据里就是三种（实测日志）：
@@ -435,25 +435,6 @@ internal static class HeroineActionBridge
     /// 权重照"大部分会回头"来配。
     /// </summary>
     private static readonly float[] ClickLookScales = { 1f, 1f, 1f, 1f, 1f, 1f, 1f, 0.5f, 0.5f, 0f };
-
-    /// <summary>
-    /// 点击聪音时的身体反应。
-    ///
-    /// 实测游戏自己的点击台词下发的是：
-    ///   body  = -1      —— 身体动作不改，她继续干活
-    ///   facial = 4/-1   —— 表情
-    ///   look  = 0/0.5/1 —— 转头幅度
-    /// 所以这里也照做：不碰身体动作，只换表情（我们的情绪表）和转头（见 SetLookAtPlayer），
-    /// 另外留两成概率换成说话手势，不然她永远只有一种反应。
-    /// </summary>
-    public static void PlayClickReaction(string state, string emotion)
-    {
-        if (!Enabled || IsGameSequenceBusy())
-            return;
-
-        if (Rng.Next(100) < ClickGestureChance)
-            Play(emotion);
-    }
 
     /// <summary>
     /// 让她转头看向玩家 / 转回去。参数照游戏自己的数：
@@ -498,19 +479,40 @@ internal static class HeroineActionBridge
         }
     }
 
-    /// <summary>播放一个情绪对应的身体动作，并同步一个安全的表情。</summary>
+    /// <summary>
+    /// 念一句台词时她的反应。规则和游戏自己的一样（ScenarioReader.CommandChangeMotion
+    /// 在点击台词里下发的就是这套）：
+    ///   身体动作不改 —— 她继续干手头的活（实测 body 一律是 -1）
+    ///   表情按情绪给
+    ///   头按 look = 1 / 0.5 / 0 转过来（大部分会转，见 SetLookAtPlayer）
+    /// 只留两成概率换成说话手势，不然她永远只有一种反应。
+    /// </summary>
     public static void Play(string emotion)
     {
         if (!Enabled || IsGameSequenceBusy())
             return;
 
+        if (Rng.Next(100) < GestureChancePercent)
+            PlayGesture(emotion);
+
+        if (emotion != null && EmotionFacials.TryGetValue(emotion, out var facial))
+            ChangeFacial(facial);
+
+        SetLookAtPlayer(true);
+    }
+
+    /// <summary>
+    /// 播放一个情绪对应的身体动作。会把她手头的活打断（换到别的动作段），
+    /// 所以只在少数时候用，见 GestureChancePercent。
+    /// </summary>
+    private static void PlayGesture(string emotion)
+    {
         int[] ids = null;
 
         // 她离席、睡着了的时候不在桌前，动身体只会更奇怪：只动嘴和表情
         if (!InvokeServiceFlag("IsLeaveChair") && !InvokeServiceFlag("IsSleeping"))
         {
-            // 先看场景：她在自己那一套基础动作里时，可以用这一套的桌面子动作；
-            // 没有合适的话，退回和情绪搭配的说话手势（游戏自己说短句用的那一套）。
+            // 场景对得上就用她当前那一套里的桌面子动作；没有就用手势
             ids = SceneAnimations();
             if (ids == null && EmotionAnimations.TryGetValue(emotion ?? "Idle", out var byEmotion))
                 ids = byEmotion;
@@ -547,9 +549,6 @@ internal static class HeroineActionBridge
                 ResetService();
             }
         }
-
-        if (emotion != null && EmotionFacials.TryGetValue(emotion, out var facial))
-            ChangeFacial(facial);
     }
 
     /// <summary>把动作 id 翻成 AnimationType 里的名字，只给日志用。</summary>
