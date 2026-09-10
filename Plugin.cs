@@ -69,7 +69,7 @@ public sealed class Plugin : BaseUnityPlugin
         _watcher = new FocusSessionWatcher();
         _uiHider = new FocusUiHider();
         _closeGuard = new CloseGuard(() => ShouldBlockGameExit());
-        _escGuard = new EscKeyGuard(() => ShouldBlockGameExit());
+        _escGuard = new EscKeyGuard();
         Application.wantsToQuit += OnWantsToQuit;
         _ui = new SettingsPageInjector(
             _store,
