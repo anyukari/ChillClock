@@ -29,9 +29,11 @@ public sealed class WindowGuard
             if (active)
             {
                 Plugin.Log.LogInfo("[Chill Clock] focus minimize started");
-                // 初始扫描也要发声：玩家在开始专注前就开着的应用被收走时，同样该提醒
+                // 开场这一轮收窗口**不出声**：那些应用是开始专注之前就开着的，
+                // 游戏自己这时候也正在说"开始工作了"，紧跟着来一句"你又开别的应用了吧"
+                // 会显得莫名其妙。专注期间新冒出来的窗口才会提醒（见 Tick）。
                 if (!HeroineActionBridge.IsGameSequenceBusy())
-                    SweepMinimizeLocked(false, true);
+                    SweepMinimizeLocked(false, false);
             }
             else
             {

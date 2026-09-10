@@ -389,6 +389,7 @@ public sealed class Plugin : BaseUnityPlugin
                 _focusActive = true;
                 _guard.SetFocusActive(true);
                 _voiceGraceUntil = Time.realtimeSinceStartup + FocusVoiceGraceSeconds;
+                ClearPendingVoices();
                 Logger.LogInfo("[Chill Clock] focus state -> Work active (poll)");
             }
         }
@@ -444,7 +445,11 @@ public sealed class Plugin : BaseUnityPlugin
         _focusActive = active;
         _guard.SetFocusActive(active);
         if (active)
+        {
             _voiceGraceUntil = Time.realtimeSinceStartup + FocusVoiceGraceSeconds;
+            // 开始专注前攒下的待播提醒（大多是开场收窗口引起的）不要带进来
+            ClearPendingVoices();
+        }
         Logger.LogInfo("[Chill Clock] event focus state -> " + (active ? "Work active" : "ended"));
     }
 
