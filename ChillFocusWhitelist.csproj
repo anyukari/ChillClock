@@ -18,6 +18,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Voices\*.wav" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Reference Include="0Harmony" Private="false">
       <HintPath>libs\0Harmony.dll</HintPath>
     </Reference>

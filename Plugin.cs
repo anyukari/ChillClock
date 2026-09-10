@@ -27,6 +27,7 @@ public sealed class Plugin : BaseUnityPlugin
     private ConfigEntry<bool> _disableStopSkip = null!;
     private ConfigEntry<bool> _hideUiDuringFocus = null!;
     private ConfigEntry<bool> _blockGameExitOnFocus = null!;
+    private ConfigEntry<bool> _voiceReminders = null!;
     private WhitelistStore _store = null!;
     private WindowGuard _guard = null!;
     private FocusSessionWatcher _watcher = null!;
@@ -34,6 +35,7 @@ public sealed class Plugin : BaseUnityPlugin
     private FocusUiHider _uiHider = null!;
     private CloseGuard _closeGuard = null!;
     private EscKeyGuard _escGuard = null!;
+    private VoiceManager _voiceManager = null!;
 
     private bool _focusActive;
     private bool _pomodoroSessionActive;
@@ -44,6 +46,9 @@ public sealed class Plugin : BaseUnityPlugin
     private CompositeDisposable _subscriptions;
     private float _nextCoreTick;
     private float _nextFocusStatusLog;
+    private bool _pendingDistractionVoice;
+    private bool _pendingTaskManagerVoice;
+    private bool _pendingExitVoice;
 
     private void Awake()
     {
@@ -60,6 +65,9 @@ public sealed class Plugin : BaseUnityPlugin
         _blockGameExitOnFocus = Config.Bind(
             "Focus", "BlockGameExitOnFocus", false,
             "专注期间是否拦截右上角 X / 任务栏关闭等正常退出操作。");
+        _voiceReminders = Config.Bind(
+            "Focus", "VoiceReminders", true,
+            "走神或尝试退出时是否播放聪音的语音提醒。");
 
         var pluginDirectory = Path.GetDirectoryName(typeof(Plugin).Assembly.Location);
         var whitelistPath = Path.Combine(pluginDirectory ?? ".", "FocusWhitelist.txt");
@@ -80,12 +88,17 @@ public sealed class Plugin : BaseUnityPlugin
             () => _hideUiDuringFocus.Value,
             value => SetConfigValue(_hideUiDuringFocus, value),
             () => _blockGameExitOnFocus.Value,
-            value => SetConfigValue(_blockGameExitOnFocus, value));
+            value => SetConfigValue(_blockGameExitOnFocus, value),
+            () => _voiceReminders.Value,
+            value => SetConfigValue(_voiceReminders, value));
 
         var hostObject = new GameObject("ChillClockHost");
         hostObject.hideFlags = HideFlags.HideAndDontSave;
         UnityEngine.Object.DontDestroyOnLoad(hostObject);
         hostObject.AddComponent<FocusHostBehaviour>();
+        _voiceManager = new VoiceManager(hostObject);
+        _guard.OnWindowMinimized += OnWindowMinimized;
+        _closeGuard.OnCloseBlocked = () => _pendingExitVoice = true;
         Logger.LogInfo("[Chill Clock] host created in Awake");
 
         try
@@ -138,7 +151,50 @@ public sealed class Plugin : BaseUnityPlugin
             _masterEnabled.Value &&
             IsPomodoroSessionActive() &&
             _hideUiDuringFocus.Value);
+        ProcessVoiceReminders();
         TickCoreHost();
+    }
+
+    private void OnWindowMinimized(string processName, bool isTaskManager)
+    {
+        if (isTaskManager)
+            _pendingTaskManagerVoice = true;
+        else
+            _pendingDistractionVoice = true;
+    }
+
+    private void ProcessVoiceReminders()
+    {
+        if (_voiceManager == null || !_voiceReminders.Value)
+        {
+            _pendingDistractionVoice = false;
+            _pendingTaskManagerVoice = false;
+            _pendingExitVoice = false;
+            return;
+        }
+
+        if (_pendingExitVoice)
+        {
+            _pendingExitVoice = false;
+            _pendingTaskManagerVoice = false;
+            _pendingDistractionVoice = false;
+            _voiceManager.PlayExitAttempt();
+            return;
+        }
+
+        if (_pendingTaskManagerVoice)
+        {
+            _pendingTaskManagerVoice = false;
+            _pendingDistractionVoice = false;
+            _voiceManager.PlayTaskManager();
+            return;
+        }
+
+        if (_pendingDistractionVoice)
+        {
+            _pendingDistractionVoice = false;
+            _voiceManager.PlayDistraction();
+        }
     }
 
     private void UpdateCloseGuard()
@@ -322,6 +378,7 @@ public sealed class Plugin : BaseUnityPlugin
         Application.wantsToQuit -= OnWantsToQuit;
         _closeGuard?.Uninstall();
         _escGuard?.Uninstall();
+        _guard.OnWindowMinimized -= OnWindowMinimized;
         _pomodoroServiceInstance = null;
         _uiHider?.RestoreAll();
         _guard?.ReleaseAll();

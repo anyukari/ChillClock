@@ -28,6 +28,8 @@ internal sealed class SettingsPageInjector
     private readonly Action<bool> _setHideUiDuringFocus;
     private readonly Func<bool> _getBlockGameExitOnFocus;
     private readonly Action<bool> _setBlockGameExitOnFocus;
+    private readonly Func<bool> _getVoiceReminders;
+    private readonly Action<bool> _setVoiceReminders;
 
     private SettingUI _settingUi;
     private bool _pageBuilt;
@@ -59,7 +61,9 @@ internal sealed class SettingsPageInjector
         Func<bool> getHideUiDuringFocus,
         Action<bool> setHideUiDuringFocus,
         Func<bool> getBlockGameExitOnFocus,
-        Action<bool> setBlockGameExitOnFocus)
+        Action<bool> setBlockGameExitOnFocus,
+        Func<bool> getVoiceReminders,
+        Action<bool> setVoiceReminders)
     {
         _store = store;
         _getMasterEnabled = getMasterEnabled;
@@ -70,6 +74,8 @@ internal sealed class SettingsPageInjector
         _setHideUiDuringFocus = setHideUiDuringFocus;
         _getBlockGameExitOnFocus = getBlockGameExitOnFocus;
         _setBlockGameExitOnFocus = setBlockGameExitOnFocus;
+        _getVoiceReminders = getVoiceReminders;
+        _setVoiceReminders = setVoiceReminders;
         Active = this;
     }
 
@@ -253,7 +259,13 @@ internal sealed class SettingsPageInjector
             _getBlockGameExitOnFocus(),
             _setBlockGameExitOnFocus));
 
-        // 5. 添加入口。
+        // 5. 语音提醒。
+        AddChild(CreateToggleRow(
+            LocalizedText.Pick("专注时语音提醒", "Voice Reminders in Focus", "集中中のボイス通知"),
+            _getVoiceReminders(),
+            _setVoiceReminders));
+
+        // 6. 添加入口。
         AddChild(CreateActionRow(
             LocalizedText.Pick("从文件添加应用", "Add App from File", "ファイルからアプリ追加"),
             LocalizedText.Pick("选择程序", "Choose .exe", "ファイルを選択"),
@@ -264,7 +276,7 @@ internal sealed class SettingsPageInjector
             LocalizedText.Pick("打开窗口列表", "Window List", "ウィンドウ一覧"),
             OpenWindowPicker));
 
-        // 6. 白名单列表区（图标在每一行的左侧）。
+        // 7. 白名单列表区（图标在每一行的左侧）。
         AddChild(CreateSectionRow(LocalizedText.Pick("白名单应用", "Whitelisted Apps", "ホワイトリスト")));
         AddChild(CreateDividerRow());
 

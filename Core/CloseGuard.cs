@@ -26,6 +26,8 @@ internal sealed class CloseGuard
         _shouldBlock = shouldBlock;
     }
 
+    public Action OnCloseBlocked { get; set; }
+
     public void EnsureInstalled()
     {
         if (_procDelegate == null)
@@ -138,7 +140,10 @@ internal sealed class CloseGuard
             {
                 var block = _shouldBlock != null && _shouldBlock();
                 if (block)
+                {
+                    OnCloseBlocked?.Invoke();
                     return IntPtr.Zero;
+                }
 
                 if (msg == WmClose)
                     return PassCloseToOriginal(hwnd, wParam, lParam);

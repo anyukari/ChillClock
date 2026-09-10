@@ -14,6 +14,8 @@ public sealed class WindowGuard
         _store = store;
     }
 
+    public Action<string, bool> OnWindowMinimized { get; set; }
+
     public bool FocusActive { get; private set; }
 
     public void SetFocusActive(bool active)
@@ -27,7 +29,7 @@ public sealed class WindowGuard
             if (active)
             {
                 Plugin.Log.LogInfo("[Chill Clock] focus minimize started");
-                SweepMinimizeLocked(false);
+                SweepMinimizeLocked(false, false);
             }
             else
             {
@@ -43,7 +45,7 @@ public sealed class WindowGuard
             if (!FocusActive)
                 return;
 
-            SweepMinimizeLocked(false);
+            SweepMinimizeLocked(false, true);
             PruneDeadHandlesLocked();
         }
     }
@@ -52,7 +54,7 @@ public sealed class WindowGuard
     {
         lock (_lock)
         {
-            SweepMinimizeLocked(true);
+            SweepMinimizeLocked(true, true);
             PruneDeadHandlesLocked();
         }
     }
@@ -63,7 +65,7 @@ public sealed class WindowGuard
             EndFocusLocked();
     }
 
-    private void SweepMinimizeLocked(bool taskManagerOnly)
+    private void SweepMinimizeLocked(bool taskManagerOnly, bool allowVoice)
     {
         var windows = Win32.EnumerateVisibleTopLevelWindows();
         foreach (var window in windows)
@@ -84,12 +86,16 @@ public sealed class WindowGuard
             if (window.IsTaskManager)
             {
                 Win32.RequestClose(window.Handle);
+                if (allowVoice)
+                    OnWindowMinimized?.Invoke(window.ProcessName ?? "taskmgr.exe", true);
                 continue;
             }
 
             if (Win32.HideWindow(window.Handle))
             {
                 _minimizedByUs.Add(window.Handle);
+                if (allowVoice)
+                    OnWindowMinimized?.Invoke(window.ProcessName, false);
                 Plugin.Log.LogInfo("[Chill Clock] minimized window: " + window.ProcessName);
             }
         }
