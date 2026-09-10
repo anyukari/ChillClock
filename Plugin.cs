@@ -478,16 +478,27 @@ public sealed class Plugin : BaseUnityPlugin
     /// </summary>
     internal bool TryTakeOverClickReaction(Bulbul.FacilityClickHeroine.ReactionType reactionType)
     {
-        if (!_clickReaction.Value || _voiceManager == null ||
-            !_voiceReminders.Value || !_masterEnabled.Value)
+        if (!_clickReaction.Value)
             return false;
+        if (_voiceManager == null || !_voiceReminders.Value || !_masterEnabled.Value)
+        {
+            Logger.LogInfo("[Chill Clock] click reaction skipped: 语音功能已关闭");
+            return false;
+        }
 
         // 只接管"玩家点击"，不碰她自发的 HeroineSelf
         if (reactionType != Bulbul.FacilityClickHeroine.ReactionType.Click)
+        {
+            Logger.LogInfo("[Chill Clock] click reaction skipped: 不是玩家点击 (" + reactionType + ")");
             return false;
+        }
 
         if (!HeroineActionBridge.CanTakeOverClickReaction())
+        {
+            Logger.LogInfo("[Chill Clock] click reaction skipped: " +
+                           (HeroineActionBridge.DescribeClickReactionBlocker() ?? "未知原因"));
             return false;
+        }
 
         var state = _focusActive
             ? "Work"
@@ -495,7 +506,10 @@ public sealed class Plugin : BaseUnityPlugin
 
         var result = _voiceManager.PlayClick(state);
         if (result != VoiceStartResult.Started)
+        {
+            Logger.LogInfo("[Chill Clock] click reaction skipped: 我们这边没播成 (" + result + ", state=" + state + ")");
             return false;
+        }
 
         Logger.LogInfo("[Chill Clock] click reaction -> our line (" + state + ")");
         return true;

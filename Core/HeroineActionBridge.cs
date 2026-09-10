@@ -214,16 +214,28 @@ internal static class HeroineActionBridge
     /// <summary>点击反应是否空闲（FacilityClickHeroine._mainState == 0）。</summary>
     public static bool IsClickReactionFree()
     {
+        return GetClickMainState() == 0;
+    }
+
+    /// <summary>
+    /// 读取 FacilityClickHeroine._mainState。
+    /// 注意它声明成枚举 MainState，反射取出来是**装箱的枚举**，
+    /// 一定要走 Convert.ToInt32，不能写 "is int"（那个判断永远为 false）。
+    /// 读不到返回 -1。
+    /// </summary>
+    private static int GetClickMainState()
+    {
         if (!EnsureClickHeroine() || _fClickMainState == null)
-            return false;
+            return -1;
 
         try
         {
-            return _fClickMainState.GetValue(_clickHeroine) is int state && state == 0;
+            var raw = _fClickMainState.GetValue(_clickHeroine);
+            return raw == null ? -1 : Convert.ToInt32(raw);
         }
         catch
         {
-            return false;
+            return -1;
         }
     }
 
@@ -246,6 +258,33 @@ internal static class HeroineActionBridge
         if (!IsPossibleClickReaction())
             return false;
         return true;
+    }
+
+    /// <summary>
+    /// 返回当前挡住"接管点击反应"的第一条原因；全部通过返回 null。
+    /// 只用于诊断日志，不参与逻辑。
+    /// </summary>
+    public static string DescribeClickReactionBlocker()
+    {
+        if (IsScenarioPlaying())
+            return "游戏中正在放剧情/演出";
+        if (IsGameEndDirection())
+            return "正在走结束通话演出";
+        if (InvokeServiceFlag("IsLeaveChair"))
+            return "她正在离席";
+        if (InvokeServiceFlag("IsPlayingPomodoroAction"))
+            return "她正在做番茄钟动作";
+        if (InvokeServiceFlag("IsPlayingClickReactionAnimation"))
+            return "她还在上一次的点击反应动作里";
+        if (InvokeServiceFlag("IsSleeping"))
+            return "她睡着了";
+        if (IsGameVoiceBusy())
+            return "游戏自己的语音还在播";
+        if (!IsClickReactionFree())
+            return "反应状态机不是空闲";
+        if (!IsPossibleClickReaction())
+            return "游戏自己认为现在不能反应";
+        return null;
     }
 
     /// <summary>播放一个情绪对应的身体动作，并同步一个安全的表情。</summary>
