@@ -20,6 +20,26 @@ internal sealed class FocusUiHider
     private readonly List<HiddenEntry> _hidden = new List<HiddenEntry>();
     private readonly HashSet<GameObject> _hiddenTargets = new HashSet<GameObject>();
 
+    /// <summary>
+    /// 场景快照的复用时长。
+    /// Resources.FindObjectsOfTypeAll 是全量扫描（Transform 会把场景里每个对象都返回），
+    /// 原先每个按钮名各扫一次、每 0.25 秒重来一轮，等于每秒几十次全场景扫描。
+    /// 现在同一轮只扫一次并且缓存这么久；隐藏动作本身仍然每 0.25 秒重放，
+    /// 所以游戏把按钮重新打开时照样会被压回去。
+    /// </summary>
+    private const float SnapshotSeconds = 1f;
+
+    private Transform[] _transformSnapshot;
+    private float _transformSnapshotExpire;
+    private TMP_Text[] _textSnapshot;
+    private float _textSnapshotExpire;
+    private PomodoroTimerUI[] _timerUiSnapshot;
+    private float _timerUiSnapshotExpire;
+    private PomodoroTimerStateView[] _stateViewSnapshot;
+    private float _stateViewSnapshotExpire;
+    private GameObject _rightIcons;
+    private GameObject _topIcons;
+
     private bool _hideStopSkip;
     private bool _hideUi;
     private bool _hideSessionButtons;
@@ -85,15 +105,7 @@ internal sealed class FocusUiHider
         HideActiveObjectsByName("PomodoroNextButton");
         HidePomodoroButtonsByText();
 
-        PomodoroTimerUI[] uis;
-        try
-        {
-            uis = Resources.FindObjectsOfTypeAll<PomodoroTimerUI>();
-        }
-        catch
-        {
-            return;
-        }
+        var uis = TimerUiSnapshot();
 
         foreach (var ui in uis)
         {
@@ -111,15 +123,7 @@ internal sealed class FocusUiHider
             HideDescendantByName(ui.transform, "PomodoroNextButton");
         }
 
-        PomodoroTimerStateView[] stateViews;
-        try
-        {
-            stateViews = Resources.FindObjectsOfTypeAll<PomodoroTimerStateView>();
-        }
-        catch
-        {
-            return;
-        }
+        var stateViews = StateViewSnapshot();
 
         foreach (var stateView in stateViews)
         {
@@ -158,18 +162,14 @@ internal sealed class FocusUiHider
     {
         PruneDeadTargets();
 
-        var rightIcons = GameObject.Find(
-            "Paremt/PCPlatform/Canvas/UI/MostFrontArea/RightIcons");
-        if (rightIcons == null)
-            rightIcons = FindActiveByExactName("RightIcons");
+        var rightIcons = ResolveCached(ref _rightIcons,
+            "Paremt/PCPlatform/Canvas/UI/MostFrontArea/RightIcons", "RightIcons");
         if (rightIcons != null)
             HideTarget(rightIcons);
 
         // ChillPatcherLite 重排后上半部分按钮位于 TopIcons，与 RightIcons 分开。
-        var topIcons = GameObject.Find(
-            "Paremt/PCPlatform/Canvas/UI/MostFrontArea/TopIcons");
-        if (topIcons == null)
-            topIcons = FindActiveByExactName("TopIcons");
+        var topIcons = ResolveCached(ref _topIcons,
+            "Paremt/PCPlatform/Canvas/UI/MostFrontArea/TopIcons", "TopIcons");
         if (topIcons != null)
             HideTarget(topIcons);
 
@@ -210,18 +210,22 @@ internal sealed class FocusUiHider
         }
     }
 
-    private static GameObject FindActiveByExactName(string name)
+    /// <summary>缓存过的 GameObject.Find：命中缓存就不再走层级查找。</summary>
+    private GameObject ResolveCached(ref GameObject cache, string path, string fallbackName)
     {
-        Transform[] all;
-        try
-        {
-            all = Resources.FindObjectsOfTypeAll<Transform>();
-        }
-        catch
-        {
-            return null;
-        }
+        if (cache != null)
+            return cache;
 
+        var found = GameObject.Find(path);
+        if (found == null)
+            found = FindActiveByExactName(fallbackName);
+        cache = found;
+        return found;
+    }
+
+    private GameObject FindActiveByExactName(string name)
+    {
+        var all = TransformSnapshot();
         foreach (var transform in all)
         {
             if (transform == null || !transform.gameObject.activeInHierarchy)
@@ -231,6 +235,82 @@ internal sealed class FocusUiHider
         }
 
         return null;
+    }
+
+    private Transform[] TransformSnapshot()
+    {
+        var now = Time.realtimeSinceStartup;
+        if (_transformSnapshot != null && now < _transformSnapshotExpire)
+            return _transformSnapshot;
+
+        try
+        {
+            _transformSnapshot = Resources.FindObjectsOfTypeAll<Transform>();
+        }
+        catch
+        {
+            _transformSnapshot = Array.Empty<Transform>();
+        }
+
+        _transformSnapshotExpire = now + SnapshotSeconds;
+        return _transformSnapshot;
+    }
+
+    private TMP_Text[] TextSnapshot()
+    {
+        var now = Time.realtimeSinceStartup;
+        if (_textSnapshot != null && now < _textSnapshotExpire)
+            return _textSnapshot;
+
+        try
+        {
+            _textSnapshot = Resources.FindObjectsOfTypeAll<TMP_Text>();
+        }
+        catch
+        {
+            _textSnapshot = Array.Empty<TMP_Text>();
+        }
+
+        _textSnapshotExpire = now + SnapshotSeconds;
+        return _textSnapshot;
+    }
+
+    private PomodoroTimerUI[] TimerUiSnapshot()
+    {
+        var now = Time.realtimeSinceStartup;
+        if (_timerUiSnapshot != null && now < _timerUiSnapshotExpire)
+            return _timerUiSnapshot;
+
+        try
+        {
+            _timerUiSnapshot = Resources.FindObjectsOfTypeAll<PomodoroTimerUI>();
+        }
+        catch
+        {
+            _timerUiSnapshot = Array.Empty<PomodoroTimerUI>();
+        }
+
+        _timerUiSnapshotExpire = now + SnapshotSeconds;
+        return _timerUiSnapshot;
+    }
+
+    private PomodoroTimerStateView[] StateViewSnapshot()
+    {
+        var now = Time.realtimeSinceStartup;
+        if (_stateViewSnapshot != null && now < _stateViewSnapshotExpire)
+            return _stateViewSnapshot;
+
+        try
+        {
+            _stateViewSnapshot = Resources.FindObjectsOfTypeAll<PomodoroTimerStateView>();
+        }
+        catch
+        {
+            _stateViewSnapshot = Array.Empty<PomodoroTimerStateView>();
+        }
+
+        _stateViewSnapshotExpire = now + SnapshotSeconds;
+        return _stateViewSnapshot;
     }
 
     private void HideDescendantByName(Transform root, string name)
@@ -292,16 +372,7 @@ internal sealed class FocusUiHider
 
     private void HideActiveObjectsByName(string name)
     {
-        Transform[] all;
-        try
-        {
-            all = Resources.FindObjectsOfTypeAll<Transform>();
-        }
-        catch
-        {
-            return;
-        }
-
+        var all = TransformSnapshot();
         foreach (var transform in all)
         {
             if (transform == null || !transform.gameObject.activeInHierarchy)
@@ -313,16 +384,7 @@ internal sealed class FocusUiHider
 
     private void HidePomodoroButtonsByText()
     {
-        TMP_Text[] texts;
-        try
-        {
-            texts = Resources.FindObjectsOfTypeAll<TMP_Text>();
-        }
-        catch
-        {
-            return;
-        }
-
+        var texts = TextSnapshot();
         foreach (var text in texts)
         {
             if (text == null || !text.gameObject.activeInHierarchy)
