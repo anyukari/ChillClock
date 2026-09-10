@@ -58,9 +58,9 @@ internal sealed class VoiceManager
     private readonly HashSet<string> _loading = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     private readonly string _externalDir;
-    private ZipArchive _pack;
-    private readonly object _packLock = new object();
     private readonly string _tempDir;
+    private byte[] _packBytes;
+    private readonly HashSet<string> _packNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     private bool _chainRunning;
     private string _lastPlayed;
     private float _nextAttempt;
@@ -82,13 +82,20 @@ internal sealed class VoiceManager
             _externalDir = Path.Combine(pluginDir, "ChillClock", "Voices");
 
         _tempDir = Path.Combine(Path.GetTempPath(), "ChillClockVoice");
-        _pack = OpenPack();
+        LoadPack();
 
         LoadCatalog();
     }
 
-    /// <summary>先找 DLL 内嵌的语音包，再找外置的 Voices.pack。</summary>
-    private static ZipArchive OpenPack()
+    /// <summary>
+    /// 先找 DLL 内嵌的语音包，再找外置的 Voices.pack，整个读到内存里。
+    ///
+    /// 这里**不长期持有 ZipArchive**，只留字节：Mono 的 ZipArchive 一旦释放过
+    /// 条目流，底层流就可能一起被关掉，之后所有条目都读不出来
+    /// （日志里就是 "Cannot access a disposed object."）。每次取语音时现开一个
+    /// 包，用完整个丢掉，就不会被这件事影响。
+    /// </summary>
+    private void LoadPack()
     {
         try
         {
@@ -97,18 +104,19 @@ internal sealed class VoiceManager
                 .FirstOrDefault(n => n.EndsWith("Voices.pack", StringComparison.OrdinalIgnoreCase));
             if (resource != null)
             {
-                var stream = assembly.GetManifestResourceStream(resource);
+                using var stream = assembly.GetManifestResourceStream(resource);
                 if (stream != null)
                 {
-                    var pack = new ZipArchive(stream, ZipArchiveMode.Read);
-                    Plugin.Log.LogInfo("[Chill Clock] voice pack: embedded (" + pack.Entries.Count + " entries)");
-                    return pack;
+                    _packBytes = ReadAllBytes(stream);
+                    Plugin.Log.LogInfo("[Chill Clock] voice pack: embedded (" + IndexPack() + " entries)");
+                    return;
                 }
             }
         }
         catch (Exception e)
         {
-            Plugin.Log.LogWarning("[Chill Clock] embedded voice pack failed: " + e.Message);
+            _packBytes = null;
+            Plugin.Log.LogWarning("[Chill Clock] embedded voice pack failed: " + e);
         }
 
         try
@@ -119,26 +127,53 @@ internal sealed class VoiceManager
                 var path = Path.Combine(pluginDir, "ChillClock", "Voices.pack");
                 if (File.Exists(path))
                 {
-                    var pack = new ZipArchive(File.OpenRead(path), ZipArchiveMode.Read);
-                    Plugin.Log.LogInfo("[Chill Clock] voice pack: " + path + " (" + pack.Entries.Count + " entries)");
-                    return pack;
+                    _packBytes = File.ReadAllBytes(path);
+                    Plugin.Log.LogInfo("[Chill Clock] voice pack: " + path + " (" + IndexPack() + " entries)");
+                    return;
                 }
             }
         }
         catch (Exception e)
         {
-            Plugin.Log.LogWarning("[Chill Clock] external voice pack failed: " + e.Message);
+            _packBytes = null;
+            Plugin.Log.LogWarning("[Chill Clock] external voice pack failed: " + e);
         }
-
-        return null;
     }
 
-    /// <summary>退出时释放包句柄。</summary>
+    private static byte[] ReadAllBytes(Stream stream)
+    {
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        return buffer.ToArray();
+    }
+
+    /// <summary>开一个一次性的语音包，只用来取这一次的数据。</summary>
+    private ZipArchive OpenArchive()
+    {
+        var bytes = _packBytes;
+        return bytes == null ? null : new ZipArchive(new MemoryStream(bytes, false), ZipArchiveMode.Read);
+    }
+
+    /// <summary>把包里的条目名记下来，省得每次取语音都去问一遍包。</summary>
+    private int IndexPack()
+    {
+        _packNames.Clear();
+        using var archive = OpenArchive();
+        if (archive == null)
+            return 0;
+
+        foreach (var entry in archive.Entries)
+            _packNames.Add(entry.FullName);
+        return archive.Entries.Count;
+    }
+
+    /// <summary>退出时丢开语音包。</summary>
     public void Dispose()
     {
         try
         {
-            _pack?.Dispose();
+            _packBytes = null;
+            _packNames.Clear();
         }
         catch
         {
@@ -333,25 +368,11 @@ internal sealed class VoiceManager
         if (_clips.ContainsKey(file) || _loading.Contains(file))
             return;
 
-        if (_pack != null)
+        if (_packBytes != null && _packNames.Contains(file))
         {
-            ZipArchiveEntry entry = null;
-            try
-            {
-                lock (_packLock)
-                    entry = _pack.GetEntry(file);
-            }
-            catch (Exception e)
-            {
-                Plugin.Log.LogWarning("[Chill Clock] pack lookup failed: " + file + " " + e.Message);
-            }
-
-            if (entry != null)
-            {
-                _loading.Add(file);
-                _runner.StartCoroutine(LoadOggFromPack(file, entry));
-                return;
-            }
+            _loading.Add(file);
+            _runner.StartCoroutine(LoadOggFromPack(file));
+            return;
         }
         else
         {
@@ -370,7 +391,7 @@ internal sealed class VoiceManager
     }
 
     /// <summary>从 Voices.pack 里取出这一条，落到临时文件再交给 Unity 解码。</summary>
-    private IEnumerator LoadOggFromPack(string file, ZipArchiveEntry entry)
+    private IEnumerator LoadOggFromPack(string file)
     {
         string temp = null;
         try
@@ -378,8 +399,12 @@ internal sealed class VoiceManager
             Directory.CreateDirectory(_tempDir);
             temp = Path.Combine(_tempDir, Guid.NewGuid().ToString("N") + ".ogg");
 
-            lock (_packLock)
+            using (var archive = OpenArchive())
             {
+                var entry = archive?.GetEntry(file);
+                if (entry == null)
+                    throw new FileNotFoundException("pack 里没有这一条");
+
                 using var src = entry.Open();
                 using var dst = File.Create(temp);
                 src.CopyTo(dst);
@@ -387,7 +412,7 @@ internal sealed class VoiceManager
         }
         catch (Exception e)
         {
-            Plugin.Log.LogWarning("[Chill Clock] pack extract failed: " + file + " " + e.Message);
+            Plugin.Log.LogWarning("[Chill Clock] pack extract failed: " + file + " " + e);
             _loading.Remove(file);
             TryDelete(temp);
 
@@ -511,20 +536,18 @@ internal sealed class VoiceManager
 
     private bool ReadCatalogFromPack()
     {
-        if (_pack == null)
+        if (_packBytes == null)
             return false;
 
         try
         {
-            ZipArchiveEntry entry;
-            lock (_packLock)
-                entry = _pack.GetEntry("voice_catalog.tsv");
-            if (entry == null)
-                return false;
-
             var rows = new List<string>();
-            lock (_packLock)
+            using (var archive = OpenArchive())
             {
+                var entry = archive?.GetEntry("voice_catalog.tsv");
+                if (entry == null)
+                    return false;
+
                 using var stream = entry.Open();
                 using var reader = new StreamReader(stream);
                 string row;
@@ -538,7 +561,7 @@ internal sealed class VoiceManager
         }
         catch (Exception e)
         {
-            Plugin.Log.LogWarning("[Chill Clock] pack catalog failed: " + e.Message);
+            Plugin.Log.LogWarning("[Chill Clock] pack catalog failed: " + e);
             return false;
         }
     }
