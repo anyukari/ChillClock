@@ -196,7 +196,12 @@ internal sealed class FocusUiHider
     {
         PruneDeadTargets();
 
-        var names = new[] { "IconSetting_Button", "IconExit_Button" };
+        var names = new[]
+        {
+            "IconSetting_Button",
+            "IconExit_Button",
+            "PomodoroPlayOrPauseButton"
+        };
         foreach (var name in names)
         {
             var target = FindActiveByExactName(name);

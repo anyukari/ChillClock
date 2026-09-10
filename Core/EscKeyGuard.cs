@@ -13,9 +13,17 @@ internal sealed class EscKeyGuard
     private const int WmKeydown = 0x0100;
     private const int WmSyskeydown = 0x0104;
     private const int VkEscape = 0x1B;
+    private const int VkControl = 0x11;
+    private const int VkShift = 0x10;
 
+    private readonly Func<bool> _shouldBlockTaskManager;
     private HookProc _hookProc;
     private IntPtr _hookId = IntPtr.Zero;
+
+    public EscKeyGuard(Func<bool> shouldBlockTaskManager)
+    {
+        _shouldBlockTaskManager = shouldBlockTaskManager;
+    }
 
     public void EnsureInstalled()
     {
@@ -72,6 +80,16 @@ internal sealed class EscKeyGuard
                     {
                         return new IntPtr(1);
                     }
+
+                    if (data.VirtualKeyCode == VkEscape &&
+                        IsGameForeground() &&
+                        IsKeyDown(VkControl) &&
+                        IsKeyDown(VkShift) &&
+                        _shouldBlockTaskManager != null &&
+                        _shouldBlockTaskManager())
+                    {
+                        return new IntPtr(1);
+                    }
                 }
             }
         }
@@ -121,6 +139,14 @@ internal sealed class EscKeyGuard
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int virtualKey);
+
+    private static bool IsKeyDown(int virtualKey)
+    {
+        return (GetAsyncKeyState(virtualKey) & 0x8000) != 0;
+    }
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr GetModuleHandle(string moduleName);

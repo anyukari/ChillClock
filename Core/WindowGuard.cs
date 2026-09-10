@@ -63,12 +63,15 @@ public sealed class WindowGuard
                 continue;
             if (window.ProcessId == (uint)Win32.CurrentProcessId)
                 continue;
-            if (string.IsNullOrEmpty(window.ProcessPath))
+            if (string.IsNullOrEmpty(window.ProcessPath) && !window.IsTaskManager)
                 continue;
             if (Win32.IsMinimized(window.Handle))
                 continue;
             if (_store.IsAllowed(window.ProcessPath, window.ProcessName))
                 continue;
+
+            if (window.IsTaskManager)
+                Win32.RequestClose(window.Handle);
 
             if (Win32.HideWindow(window.Handle))
             {

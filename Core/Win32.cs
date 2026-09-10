@@ -72,6 +72,9 @@ internal static class Win32
     private static extern bool ShowWindow(IntPtr hWnd, int command);
 
     [DllImport("user32.dll")]
+    private static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
         int x, int y, int cx, int cy, uint flags);
 
@@ -117,6 +120,7 @@ internal static class Win32
         public bool IsVisible;
         public bool IsShellWindow;
         public bool IsStartMenuCandidate;
+        public bool IsTaskManager;
     }
 
     public static int CurrentProcessId { get; } = Process.GetCurrentProcess().Id;
@@ -129,6 +133,11 @@ internal static class Win32
     public static bool RestoreWindow(IntPtr hWnd)
     {
         return ShowWindow(hWnd, SwRestore);
+    }
+
+    public static void RequestClose(IntPtr hWnd)
+    {
+        PostMessage(hWnd, 0x0010, IntPtr.Zero, IntPtr.Zero);
     }
 
     public static bool ForceShowWindow(IntPtr hWnd)
@@ -281,6 +290,11 @@ internal static class Win32
             return null;
 
         var title = GetText(hWnd, GetWindowText);
+        var path = TryGetProcessPath(pid);
+        var processName = string.IsNullOrEmpty(path)
+            ? TryGetProcessNameByPid(pid)
+            : System.IO.Path.GetFileName(path);
+        var isTaskManager = IsTaskManagerWindow(className, title, processName);
         var info = new WindowInfo
         {
             Handle = hWnd,
@@ -289,15 +303,16 @@ internal static class Win32
             Title = title,
             IsVisible = IsWindowVisible(hWnd),
             IsShellWindow = IsShellClass(className),
-            IsStartMenuCandidate = IsStartMenuClass(className, pid)
+            IsStartMenuCandidate = IsStartMenuClass(className, pid),
+            IsTaskManager = isTaskManager
         };
 
-        var path = TryGetProcessPath(pid);
-        if (path == null && !info.IsShellWindow && !info.IsStartMenuCandidate)
+        if (path == null && processName == null &&
+            !info.IsShellWindow && !info.IsStartMenuCandidate && !isTaskManager)
             return null;
 
         info.ProcessPath = path;
-        info.ProcessName = string.IsNullOrEmpty(path) ? null : System.IO.Path.GetFileName(path);
+        info.ProcessName = processName;
         return info;
     }
 
@@ -370,5 +385,32 @@ internal static class Win32
     {
         var path = TryGetProcessPath(pid);
         return string.IsNullOrEmpty(path) ? null : System.IO.Path.GetFileName(path);
+    }
+
+    private static string TryGetProcessNameByPid(uint pid)
+    {
+        try
+        {
+            return Process.GetProcessById((int)pid).ProcessName + ".exe";
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool IsTaskManagerWindow(string className, string title, string processName)
+    {
+        if (!string.IsNullOrEmpty(processName) &&
+            string.Equals(processName, "taskmgr.exe", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (string.Equals(className, "TaskManagerWindow", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (string.IsNullOrEmpty(title))
+            return false;
+        return title.IndexOf("任务管理器", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               title.IndexOf("Task Manager", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               title.IndexOf("タスク マネージャー", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 }
