@@ -43,6 +43,10 @@ internal static class HeroineActionBridge
     /// 我们单独播的时候道具不在，手就按老位置伸过去，穿过键盘和桌面。
     /// 更麻烦的是 304/305 属于 WorkBase003，播完会把她留在"伏案写字"那一套姿势里，
     /// 于是她明明在敲键盘，却开始对着桌面写字。
+    ///
+    /// 2026-09-11 实测：她正在敲键盘（state=WorkPC、desk=Pc，本身就是 WorkBase002 家族）时
+    /// 播 253/255 翻页，手照样穿过键盘 —— 说明这几个动作要的是游戏自己摆出来的纸，
+    /// 跟"是不是同一个动画家族"无关。所以这批道具动作一律不用了。
     /// </summary>
     private static readonly Dictionary<string, int[]> EmotionAnimations =
         new Dictionary<string, int[]>(StringComparer.OrdinalIgnoreCase)
@@ -68,15 +72,6 @@ internal static class HeroineActionBridge
             ["Idle"] = new[] { 1301, 1001 }
         };
 
-    /// <summary>
-    /// 场景对得上的动作。这些和上面那批不一样：它们属于她**当前**这套姿势所在的
-    /// 动画家族，游戏自己在她这个状态下也会播，所以手、道具、桌面位置都是对的。
-    /// 挑不到合适的场景时不用它们（见 SceneAnimations），退回上面那批"坐着说话"的手势。
-    /// </summary>
-    private static readonly int[] PcAnimations = { 253, 255, 256 };
-    private static readonly int[] ReportAnimations = { 304, 305 };
-    private static readonly int[] BreakBookAnimations = { 651, 652 };
-    private static readonly int[] BreakTeaAnimations = { 755 };
 
     /// <summary>情绪 -> FacialType（Animator 整数参数 "Facial"）。</summary>
     private static readonly Dictionary<string, int> EmotionFacials =
@@ -363,63 +358,37 @@ internal static class HeroineActionBridge
         }
     }
 
-    /// <summary>
-    /// 按她此刻在干什么挑一组动作；场景对不上时返回 null（调用方退回"坐着说话"的手势）。
-    ///
-    /// 关键点：这些动作必须来自她**当前**姿势所在的动画家族。比如她在敲键盘
-    /// （WorkPC，桌上是电脑）时播 304/305，那是伏案写字那一套的触发，
-    /// 动画器会把她整个切到写字姿势，手也就按写字的桌面位置放下了 —— 于是穿模。
-    /// 反过来在她的本家family里挑，手、道具、桌面布局和游戏自己播的时候是一样的。
-    /// </summary>
-    private static int[] SceneAnimations()
-    {
-        switch (GetActionState())
-        {
-            case 17: // WorkPC —— 桌上是电脑，游戏自己也会翻文件、端杯子
-                return PcAnimations;
-            case 19: // WorkReport —— 伏案写字
-                return ReportAnimations;
-            case 21: // BreakReadBook —— 在看书，手里有书
-                return BreakBookAnimations;
-            case 23: // BreakTeaTime —— 手里有杯子
-                return BreakTeaAnimations;
-            case -1: // 状态读不到时退回看桌面摆设（Book 那套没有能安全触发的动作）
-                switch (GetDeskType())
-                {
-                    case 1: return PcAnimations;
-                    case 2: return ReportAnimations;
-                    default: return null;
-                }
-            default: // 看书工作、听音乐、睡觉、剧情、切换桌面……一律用手势
-                return null;
-        }
-    }
-
     /// <summary>播放一个情绪对应的身体动作，并同步一个安全的表情。</summary>
     public static void Play(string emotion)
     {
         if (!Enabled || IsGameSequenceBusy())
             return;
 
-        // 优先用"当前场景对得上"的动作；对不上才退回与情绪搭配的坐姿手势
-        var ids = SceneAnimations();
-        if (ids == null && EmotionAnimations.TryGetValue(emotion ?? "Idle", out var byEmotion))
+        // 我们的动作都是"坐在桌前和你说话"的手势——游戏自己在她工作时说短句
+        // （FacilityClickHeroine.OneWord → 小剧情）用的也是这一组。
+        // 她离席、睡着了的时候不在桌前，这套手势会显得突兀：那就只动嘴和表情。
+        int[] ids = null;
+        if (!InvokeServiceFlag("IsLeaveChair") &&
+            !InvokeServiceFlag("IsSleeping") &&
+            EmotionAnimations.TryGetValue(emotion ?? "Idle", out var byEmotion))
+        {
             ids = byEmotion;
+        }
 
         if (ids != null &&
             ids.Length > 0 &&
             EnsureService() != null)
         {
             var id = ids[Rng.Next(ids.Length)];
+            var before = CurrentAnimationName();
             try
             {
                 _changeAnimation.Invoke(_service, new object[] { id });
                 Plugin.Log.LogInfo("[Chill Clock] action: " + (emotion ?? "") +
                                    " -> " + AnimationName(id) + "(" + id + ")" +
                                    " state=" + ActionStateName(GetActionState()) +
-                                   "(" + GetActionState() + ")" +
                                    " desk=" + DeskName(GetDeskType()) +
-                                   " anim=" + CurrentAnimationName());
+                                   " was=" + before);
             }
             catch (Exception e)
             {
@@ -437,12 +406,11 @@ internal static class HeroineActionBridge
     {
         try
         {
-            var parameters = _changeAnimation?.GetParameters();
-            var type = parameters != null && parameters.Length > 0 ? parameters[0].ParameterType : null;
-            if (type == null || !type.IsEnum)
-                return "?";
-
-            return Enum.GetName(type, id) ?? "?";
+            // ChangeHeroineAnimationForInteger 的参数是 int，枚举类型得从
+            // GetCurrentAnimationType() 的返回值上拿。
+            return _animationTypeEnum != null && _animationTypeEnum.IsEnum
+                ? (Enum.GetName(_animationTypeEnum, id) ?? "?")
+                : "?";
         }
         catch
         {
@@ -475,9 +443,13 @@ internal static class HeroineActionBridge
     {
         try
         {
-            return value < 0 || _actionStateType == null || !_actionStateType.IsEnum
-                ? "?"
-                : (Enum.GetName(_actionStateType, value) ?? "?");
+            if (value < 0)
+                return "?";
+
+            var name = _actionStateType != null && _actionStateType.IsEnum
+                ? (Enum.GetName(_actionStateType, value) ?? "?")
+                : "?";
+            return name + "(" + value + ")";
         }
         catch
         {
@@ -489,10 +461,14 @@ internal static class HeroineActionBridge
     {
         try
         {
+            if (value < 0)
+                return "?";
+
             var type = _pDeskType?.PropertyType;
-            return value < 0 || type == null || !type.IsEnum
+            var name = type == null || !type.IsEnum
                 ? "?"
                 : (Enum.GetName(type, value) ?? "?");
+            return name + "(" + value + ")";
         }
         catch
         {
