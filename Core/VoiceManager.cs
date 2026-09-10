@@ -195,7 +195,7 @@ internal sealed class VoiceManager
     /// </summary>
     public VoiceStartResult PlayClick(string state)
     {
-        var result = Play("Click_" + state, 8f);
+        var result = Play("Click_" + state, 4f);
         if (result == VoiceStartResult.Started)
             _nextIsClick = true;
         return result;
