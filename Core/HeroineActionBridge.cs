@@ -480,25 +480,41 @@ internal static class HeroineActionBridge
     }
 
     /// <summary>
-    /// 念一句台词时她的反应。规则和游戏自己的一样（ScenarioReader.CommandChangeMotion
-    /// 在点击台词里下发的就是这套）：
-    ///   身体动作不改 —— 她继续干手头的活（实测 body 一律是 -1）
-    ///   表情按情绪给
-    ///   头按 look = 1 / 0.5 / 0 转过来（大部分会转，见 SetLookAtPlayer）
-    /// 只留两成概率换成说话手势，不然她永远只有一种反应。
+    /// 念一句台词时她的反应。**只有她正坐在桌前干活时才动她的动作和视线** ——
+    /// 那时候规则和游戏自己一样（ScenarioReader.CommandChangeMotion 在点击台词里
+    /// 下发的就是这套）：身体动作不改（继续干活）、表情按情绪给、头按 look 转过来。
+    ///
+    /// 休息、听音乐、在沙发上、离席这些时候她手里有别的事（看书、喝茶、发呆），
+    /// 我们只换表情，不去碰她的动作和视线。
+    ///
+    /// 返回值表示这次有没有动过她的视线（调用方负责说完再放回去）。
     /// </summary>
-    public static void Play(string emotion)
+    public static bool Play(string emotion, bool isClickReaction)
     {
         if (!Enabled || IsGameSequenceBusy())
-            return;
+            return false;
 
-        if (Rng.Next(100) < GestureChancePercent)
+        // ActionStateType 17/18/19 = WorkPC / WorkBook / WorkReport，也就是"在桌前干活"
+        var atDesk = IsWorkingAtDesk();
+
+        if ((atDesk || isClickReaction) && Rng.Next(100) < GestureChancePercent)
             PlayGesture(emotion);
 
         if (emotion != null && EmotionFacials.TryGetValue(emotion, out var facial))
             ChangeFacial(facial);
 
+        if (!atDesk && !isClickReaction)
+            return false;
+
         SetLookAtPlayer(true);
+        return true;
+    }
+
+    /// <summary>她此刻是不是坐在桌前干活（电脑/看书/写字三种工作状态）。</summary>
+    private static bool IsWorkingAtDesk()
+    {
+        var state = GetActionState();
+        return state == 17 || state == 18 || state == 19;
     }
 
     /// <summary>

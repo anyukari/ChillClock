@@ -66,6 +66,7 @@ internal sealed class VoiceManager
     private string _lastPlayed;
     private float _nextAttempt;
     private bool _lookingAtPlayer;
+    private bool _nextIsClick;
 
     public VoiceManager(GameObject host)
     {
@@ -196,6 +197,8 @@ internal sealed class VoiceManager
     public VoiceStartResult PlayClick(string state)
     {
         var result = Play("Click_" + state, 8f);
+        if (result == VoiceStartResult.Started)
+            _nextIsClick = true;
         return result;
     }
 
@@ -396,10 +399,10 @@ internal sealed class VoiceManager
         if (!_catalog.TryGetValue(fileName, out var line))
             return;
 
-        // 念台词时按游戏自己的规则来：不动身体动作（她继续干手头的活），
-        // 只换表情 + 转头（都在 Play 里做了），链子结束时统一把视线放回去。
-        HeroineActionBridge.Play(line.Emotion);
-        _lookingAtPlayer = true;
+        // 念台词时按游戏自己的规则来（她干活时不动身体、只转头；不在干活时只换表情），
+        // 链子结束时统一把视线放回去。
+        _lookingAtPlayer = HeroineActionBridge.Play(line.Emotion, _nextIsClick);
+        _nextIsClick = false;
 
         // 英文还没翻译完时，英语用户至少能看到日文原文，不至于空字幕
         var english = string.IsNullOrEmpty(line.English) ? line.Japanese : line.English;
