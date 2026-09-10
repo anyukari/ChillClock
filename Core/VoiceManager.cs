@@ -183,9 +183,9 @@ internal sealed class VoiceManager
         }
     }
 
-    public VoiceStartResult PlayDistraction() => Play("Distraction", 8f);
-    public VoiceStartResult PlayTaskManager() => Play("TaskManager", 5f);
-    public VoiceStartResult PlayExitAttempt() => Play("Exit", 6f);
+    public VoiceStartResult PlayDistraction() => Play("Distraction", 3f);
+    public VoiceStartResult PlayTaskManager() => Play("TaskManager", 4f);
+    public VoiceStartResult PlayExitAttempt() => Play("Exit", 4f);
     public VoiceStartResult PlayRestReminder() => Play("Rest", 30f);
     public VoiceStartResult PlayAmbient() => Play("Ambient", 45f);
 
