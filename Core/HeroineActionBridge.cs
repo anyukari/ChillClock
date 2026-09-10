@@ -425,18 +425,26 @@ internal static class HeroineActionBridge
     }
 
     /// <summary>点击反应里"换个手势做动作"的概率（其余时候她照旧干活，只回头）。</summary>
-    private const int ClickGestureChance = 25;
+    private const int ClickGestureChance = 20;
+
+    /// <summary>
+    /// 点击时转头的幅度。游戏自己的数据里就是三种（实测日志）：
+    ///   look = 1    整个头转过来看你
+    ///   look = 0.5  转一半
+    ///   look = 0    不转，就一边干活一边说
+    /// 权重照"大部分会回头"来配。
+    /// </summary>
+    private static readonly float[] ClickLookScales = { 1f, 1f, 1f, 1f, 1f, 1f, 1f, 0.5f, 0.5f, 0f };
 
     /// <summary>
     /// 点击聪音时的身体反应。
     ///
-    /// 不动她的身体动画：她是个认真工作的人，被点了也就是抬头看你一眼，
-    /// 手上的活不停。转头交给 LookAt IK（见 SetLookAtPlayer），
-    /// 只偶尔（四分之一）才换一个情绪手势。
-    ///
-    /// 试过游戏自己的 Desk_Click_*_Reaction(402/403/404)：那个动作本身是
-    /// "停下手里的活、回头看你"整段演出，播下去她就不干活了，还会来回看好几次，
-    /// 和"一边干活一边说话"正好相反。
+    /// 实测游戏自己的点击台词下发的是：
+    ///   body  = -1      —— 身体动作不改，她继续干活
+    ///   facial = 4/-1   —— 表情
+    ///   look  = 0/0.5/1 —— 转头幅度
+    /// 所以这里也照做：不碰身体动作，只换表情（我们的情绪表）和转头（见 SetLookAtPlayer），
+    /// 另外留两成概率换成说话手势，不然她永远只有一种反应。
     /// </summary>
     public static void PlayClickReaction(string state, string emotion)
     {
@@ -448,9 +456,12 @@ internal static class HeroineActionBridge
     }
 
     /// <summary>
-    /// 让她转头看向玩家 / 转回去。
+    /// 让她转头看向玩家 / 转回去。参数照游戏自己的数：
+    /// 看过去用 scale(1 / 0.5 / 0) + 1 秒、ease = Unset；
+    /// 转回来固定 scale 0 + 2 秒（日志里游戏自己回头也是 0/2/Unset）。
     ///
-    /// 走 HeroineService.ChangeLookScaleByManual（她自己的 LookAt IK）：
+    /// 走 HeroineService.ChangeLookScaleByManual（她自己的 LookAt IK），
+    /// 也就是游戏 ScenarioReader.CommandChangeMotion 调的同一个服务：
     /// 只改头部和眼神的权重，身体动画照旧，所以她还在敲键盘、翻书、写字，
     /// 只是转过头来跟你说话 —— 就是"一边干活一边回头"。
     /// </summary>
@@ -464,16 +475,21 @@ internal static class HeroineActionBridge
         if (_changeLook == null)
             return;
 
+        var scale = look ? ClickLookScales[Rng.Next(ClickLookScales.Length)] : 0f;
+        var seconds = look ? 1f : 2f;
+
         try
         {
-            // 第 3 个参数是 DG.Tweening.Ease，1 = Linear
+            // 第 3 个参数是 DG.Tweening.Ease，游戏那边下发的是 Unset(0)
             var parameters = _changeLook.GetParameters();
             var ease = parameters.Length > 2
-                ? Enum.ToObject(parameters[2].ParameterType, 1)
+                ? Enum.ToObject(parameters[2].ParameterType, 0)
                 : null;
 
-            // 看过去慢一点（转头要看得见），转回来快一点
-            _changeLook.Invoke(_service, new object[] { look ? 1f : 0f, look ? 0.5f : 1f, ease });
+            _changeLook.Invoke(_service, new object[] { scale, seconds, ease });
+
+            if (look)
+                Plugin.Log.LogInfo("[Chill Clock] click look: scale=" + scale + " seconds=" + seconds);
         }
         catch (Exception e)
         {
