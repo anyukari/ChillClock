@@ -49,6 +49,7 @@ public sealed class Plugin : BaseUnityPlugin
     private bool _pendingDistractionVoice;
     private bool _pendingTaskManagerVoice;
     private bool _pendingExitVoice;
+    private bool _pendingRestVoice;
 
     private void Awake()
     {
@@ -170,6 +171,7 @@ public sealed class Plugin : BaseUnityPlugin
             _pendingDistractionVoice = false;
             _pendingTaskManagerVoice = false;
             _pendingExitVoice = false;
+            _pendingRestVoice = false;
             return;
         }
 
@@ -178,6 +180,7 @@ public sealed class Plugin : BaseUnityPlugin
             _pendingExitVoice = false;
             _pendingTaskManagerVoice = false;
             _pendingDistractionVoice = false;
+            _pendingRestVoice = false;
             _voiceManager.PlayExitAttempt();
             return;
         }
@@ -186,7 +189,16 @@ public sealed class Plugin : BaseUnityPlugin
         {
             _pendingTaskManagerVoice = false;
             _pendingDistractionVoice = false;
+            _pendingRestVoice = false;
             _voiceManager.PlayTaskManager();
+            return;
+        }
+
+        if (_pendingRestVoice)
+        {
+            _pendingRestVoice = false;
+            _pendingDistractionVoice = false;
+            _voiceManager.PlayRestReminder();
             return;
         }
 
@@ -327,6 +339,13 @@ public sealed class Plugin : BaseUnityPlugin
     internal void SetPomodoroSessionActive(bool active)
     {
         _pomodoroSessionActive = active;
+        if (!active)
+            _pendingRestVoice = false;
+    }
+
+    internal void OnBreakStarted()
+    {
+        _pendingRestVoice = true;
     }
 
     internal void AttachPomodoroService(Bulbul.PomodoroService service)

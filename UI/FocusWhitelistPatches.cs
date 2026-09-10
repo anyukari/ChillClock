@@ -56,7 +56,10 @@ internal static class PomodoroTimerEndPatch
         {
             var type = __instance.CurrentPomodoroType;
             if (type == Bulbul.PomodoroService.PomodoroType.Work)
+            {
+                Plugin.Instance?.OnBreakStarted();
                 Plugin.Instance?.SetFocusFromEvent(false);
+            }
             else if (type == Bulbul.PomodoroService.PomodoroType.Break)
                 Plugin.Instance?.SetFocusFromEvent(true);
         }

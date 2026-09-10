@@ -14,6 +14,19 @@ internal sealed class VoiceManager
 {
     private static readonly string[] DistractionVoices =
     {
+        "New_Distraction_01.wav",
+        "New_Distraction_02.wav",
+        "New_Distraction_03.wav",
+        "New_Distraction_04.wav",
+        "New_Distraction_05.wav",
+        "New_Distraction_06.wav",
+        "New_Distraction_07.wav",
+        "New_Distraction_08.wav",
+        "New_Gentle_01.wav",
+        "New_Gentle_02.wav",
+        "New_Gentle_03.wav",
+        "New_Gentle_04.wav",
+        "New_Gentle_05.wav",
         "Voice_ClickHeroine_Word_Work_002.wav",
         "Voice_ClickHeroine_Word_Work_004.wav",
         "Voice_ClickHeroine_Word_Work_010.wav",
@@ -32,6 +45,10 @@ internal sealed class VoiceManager
 
     private static readonly string[] TaskManagerVoices =
     {
+        "New_TaskManager_01.wav",
+        "New_TaskManager_02.wav",
+        "New_TaskManager_03.wav",
+        "New_TaskManager_04.wav",
         "Voice_ClickHeroine_Word_Work_010.wav",
         "Voice_ClickHeroine_Word_Work_017.wav",
         "Voice_ClickHeroine_Word_Work_004.wav",
@@ -40,9 +57,21 @@ internal sealed class VoiceManager
 
     private static readonly string[] ExitAttemptVoices =
     {
+        "New_Exit_01.wav",
+        "New_Exit_02.wav",
+        "New_Exit_03.wav",
+        "New_Exit_04.wav",
         "Voice_ClickHeroine_Word_Work_002.wav",
         "Voice_ClickHeroine_Word_Work_010.wav",
         "Voice_PomodoroFinish_Talk_19_Reaction_001.wav"
+    };
+
+    private static readonly string[] RestReminderVoices =
+    {
+        "New_Rest_01.wav",
+        "New_Rest_02.wav",
+        "New_Rest_03.wav",
+        "New_Rest_04.wav"
     };
 
     private readonly AudioSource _source;
@@ -52,6 +81,7 @@ internal sealed class VoiceManager
     private float _nextDistractionTime;
     private float _nextTaskManagerTime;
     private float _nextExitAttemptTime;
+    private float _nextRestTime;
     private string _lastPlayed;
 
     public VoiceManager(GameObject host)
@@ -78,6 +108,11 @@ internal sealed class VoiceManager
     public void PlayExitAttempt()
     {
         Play(ExitAttemptVoices, ref _nextExitAttemptTime, 6f);
+    }
+
+    public void PlayRestReminder()
+    {
+        Play(RestReminderVoices, ref _nextRestTime, 12f);
     }
 
     private void Play(string[] voices, ref float nextTime, float cooldown)
