@@ -70,6 +70,7 @@ internal static class HeroineActionBridge
         };
 
     private static MonoBehaviour _heroineAi;
+    private static float _nextHeroineLookup;
     private static FieldInfo _fService;
     private static FieldInfo _fVoiceController;
     private static FieldInfo _fFacialController;
@@ -278,9 +279,18 @@ internal static class HeroineActionBridge
         if (_heroineAi != null)
             return true;
 
+        // 场景里没有 HeroineAI 时（标题画面 / 读盘 / 结算）不要每次调用都全场景扫一遍：
+        // 这个方法会被演出闸门每秒调用好几次，FindObjectsOfType<MonoBehaviour>() 很贵。
+        // 失败后隔 2 秒再试；成功时不设退避，这样换场景后能立刻重新解析。
+        if (Time.realtimeSinceStartup < _nextHeroineLookup)
+            return false;
+
         _heroineAi = FindBehaviour("HeroineAI");
         if (_heroineAi == null)
+        {
+            _nextHeroineLookup = Time.realtimeSinceStartup + 2f;
             return false;
+        }
 
         var type = _heroineAi.GetType();
         _fService = type.GetField("_heroineService", Instance);
