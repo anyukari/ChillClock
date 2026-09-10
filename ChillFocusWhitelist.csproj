@@ -40,6 +40,9 @@
     <Reference Include="System.Drawing" Private="false">
       <HintPath>$(GameDir)\Chill With You_Data\Managed\System.Drawing.dll</HintPath>
     </Reference>
+    <Reference Include="System.IO.Compression" Private="false">
+      <HintPath>$(GameDir)\Chill With You_Data\Managed\System.IO.Compression.dll</HintPath>
+    </Reference>
     <Reference Include="R3" Private="false">
       <HintPath>$(GameDir)\Chill With You_Data\Managed\R3.dll</HintPath>
     </Reference>

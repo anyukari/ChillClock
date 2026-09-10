@@ -476,6 +476,7 @@ public sealed class Plugin : BaseUnityPlugin
     private void OnDestroy()
     {
         Application.wantsToQuit -= OnWantsToQuit;
+        _voiceManager?.Dispose();
         _closeGuard?.Uninstall();
         _escGuard?.Uninstall();
         _guard.OnWindowMinimized -= OnWindowMinimized;

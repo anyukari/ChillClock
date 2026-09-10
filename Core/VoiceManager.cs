@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
 using ChillFocusWhitelist.UI;
@@ -25,8 +26,10 @@ internal enum VoiceStartResult
 
 /// <summary>
 /// 聪音的语音提醒。
-/// 语音包优先从 plugins\ChillClock\Voices\ 读（OGG + voice_catalog.tsv），
-/// 找不到就退回 DLL 里内嵌的那几十条 WAV。
+/// 语音包按这个顺序找：
+///   1. plugins\ChillClock\Voices.pack —— 单个 ZIP（内含 voice_catalog.tsv + 全部 OGG）
+///   2. plugins\ChillClock\Voices\     —— 散放的 OGG 目录
+///   3. DLL 内嵌的那几十条 WAV        —— 最后的兜底
 /// </summary>
 internal sealed class VoiceManager
 {
@@ -54,6 +57,9 @@ internal sealed class VoiceManager
     private readonly HashSet<string> _loading = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     private readonly string _externalDir;
+    private readonly ZipArchive _pack;
+    private readonly object _packLock = new object();
+    private readonly string _tempDir;
     private bool _chainRunning;
     private string _lastPlayed;
     private float _nextAttempt;
@@ -72,9 +78,41 @@ internal sealed class VoiceManager
 
         var pluginDir = Path.GetDirectoryName(typeof(Plugin).Assembly.Location);
         if (!string.IsNullOrEmpty(pluginDir))
+        {
             _externalDir = Path.Combine(pluginDir, "ChillClock", "Voices");
 
+            var packPath = Path.Combine(pluginDir, "ChillClock", "Voices.pack");
+            if (File.Exists(packPath))
+            {
+                try
+                {
+                    _pack = new ZipArchive(File.OpenRead(packPath), ZipArchiveMode.Read);
+                    Plugin.Log.LogInfo("[Chill Clock] voice pack: " + packPath + " (" + _pack.Entries.Count + " entries)");
+                }
+                catch (Exception e)
+                {
+                    _pack = null;
+                    Plugin.Log.LogWarning("[Chill Clock] voice pack open failed, falling back to folder: " + e.Message);
+                }
+            }
+        }
+
+        _tempDir = Path.Combine(Path.GetTempPath(), "ChillClockVoice");
+
         LoadCatalog();
+    }
+
+    /// <summary>退出时释放包句柄。</summary>
+    public void Dispose()
+    {
+        try
+        {
+            _pack?.Dispose();
+        }
+        catch
+        {
+            // ignore
+        }
     }
 
     public VoiceStartResult PlayDistraction() => Play("Distraction", 8f);
@@ -227,12 +265,35 @@ internal sealed class VoiceManager
         if (_clips.ContainsKey(file) || _loading.Contains(file))
             return;
 
-        var path = string.IsNullOrEmpty(_externalDir) ? null : Path.Combine(_externalDir, file);
-        if (path != null && File.Exists(path))
+        if (_pack != null)
         {
-            _loading.Add(file);
-            _runner.StartCoroutine(LoadOgg(file, path));
-            return;
+            ZipArchiveEntry entry = null;
+            try
+            {
+                lock (_packLock)
+                    entry = _pack.GetEntry(file);
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogWarning("[Chill Clock] pack lookup failed: " + file + " " + e.Message);
+            }
+
+            if (entry != null)
+            {
+                _loading.Add(file);
+                _runner.StartCoroutine(LoadOggFromPack(file, entry));
+                return;
+            }
+        }
+        else
+        {
+            var path = string.IsNullOrEmpty(_externalDir) ? null : Path.Combine(_externalDir, file);
+            if (path != null && File.Exists(path))
+            {
+                _loading.Add(file);
+                _runner.StartCoroutine(LoadOgg(file, path, false));
+                return;
+            }
         }
 
         var embedded = LoadEmbedded(file);
@@ -240,7 +301,38 @@ internal sealed class VoiceManager
             Store(file, embedded);
     }
 
-    private IEnumerator LoadOgg(string file, string path)
+    /// <summary>从 Voices.pack 里取出这一条，落到临时文件再交给 Unity 解码。</summary>
+    private IEnumerator LoadOggFromPack(string file, ZipArchiveEntry entry)
+    {
+        string temp = null;
+        try
+        {
+            Directory.CreateDirectory(_tempDir);
+            temp = Path.Combine(_tempDir, Guid.NewGuid().ToString("N") + ".ogg");
+
+            lock (_packLock)
+            {
+                using var src = entry.Open();
+                using var dst = File.Create(temp);
+                src.CopyTo(dst);
+            }
+        }
+        catch (Exception e)
+        {
+            Plugin.Log.LogWarning("[Chill Clock] pack extract failed: " + file + " " + e.Message);
+            _loading.Remove(file);
+            TryDelete(temp);
+
+            var fallback = LoadEmbedded(file);
+            if (fallback != null)
+                Store(file, fallback);
+            yield break;
+        }
+
+        yield return LoadOgg(file, temp, true);
+    }
+
+    private IEnumerator LoadOgg(string file, string path, bool deleteAfterLoad)
     {
         var request = UnityWebRequestMultimedia.GetAudioClip("file:///" + path.Replace('\\', '/'), AudioType.OGGVORBIS);
         yield return request.SendWebRequest();
@@ -256,6 +348,8 @@ internal sealed class VoiceManager
                 if (!clip.LoadAudioData())
                     Plugin.Log.LogWarning("[Chill Clock] LoadAudioData failed: " + file);
                 Store(file, clip);
+                if (deleteAfterLoad)
+                    TryDelete(path);
                 yield break;
             }
             Plugin.Log.LogWarning("[Chill Clock] ogg decode null: " + file);
@@ -266,9 +360,28 @@ internal sealed class VoiceManager
             request.Dispose();
         }
 
+        if (deleteAfterLoad)
+            TryDelete(path);
+
         var embedded = LoadEmbedded(file);
         if (embedded != null)
             Store(file, embedded);
+    }
+
+    private static void TryDelete(string path)
+    {
+        if (string.IsNullOrEmpty(path))
+            return;
+
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch
+        {
+            // 临时文件删不掉就算了，下次启动会覆盖
+        }
     }
 
     private static AudioClip LoadEmbedded(string fileName)
@@ -298,11 +411,9 @@ internal sealed class VoiceManager
     {
         try
         {
-            var external = string.IsNullOrEmpty(_externalDir) ? null : Path.Combine(_externalDir, "voice_catalog.tsv");
-            if (external != null && File.Exists(external))
+            if (ReadCatalogFromPack() || ReadCatalogFromFolder())
             {
-                ParseCatalog(File.ReadAllLines(external));
-                Plugin.Log.LogInfo("[Chill Clock] external voice catalog: " + _catalog.Count + " lines");
+                // 已从外部语音包读到
             }
             else
             {
@@ -328,6 +439,59 @@ internal sealed class VoiceManager
 
         BuildPools();
         BuildChains();
+    }
+
+    private bool ReadCatalogFromPack()
+    {
+        if (_pack == null)
+            return false;
+
+        try
+        {
+            ZipArchiveEntry entry;
+            lock (_packLock)
+                entry = _pack.GetEntry("voice_catalog.tsv");
+            if (entry == null)
+                return false;
+
+            var rows = new List<string>();
+            lock (_packLock)
+            {
+                using var stream = entry.Open();
+                using var reader = new StreamReader(stream);
+                string row;
+                while ((row = reader.ReadLine()) != null)
+                    rows.Add(row);
+            }
+
+            ParseCatalog(rows);
+            Plugin.Log.LogInfo("[Chill Clock] voice catalog from pack: " + _catalog.Count + " lines");
+            return true;
+        }
+        catch (Exception e)
+        {
+            Plugin.Log.LogWarning("[Chill Clock] pack catalog failed: " + e.Message);
+            return false;
+        }
+    }
+
+    private bool ReadCatalogFromFolder()
+    {
+        try
+        {
+            var external = string.IsNullOrEmpty(_externalDir) ? null : Path.Combine(_externalDir, "voice_catalog.tsv");
+            if (external == null || !File.Exists(external))
+                return false;
+
+            ParseCatalog(File.ReadAllLines(external));
+            Plugin.Log.LogInfo("[Chill Clock] external voice catalog: " + _catalog.Count + " lines");
+            return true;
+        }
+        catch (Exception e)
+        {
+            Plugin.Log.LogWarning("[Chill Clock] external catalog failed: " + e.Message);
+            return false;
+        }
     }
 
     private void ParseCatalog(IEnumerable<string> rows)
