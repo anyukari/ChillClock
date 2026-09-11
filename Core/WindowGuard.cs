@@ -114,9 +114,10 @@ public sealed class WindowGuard
             }
         }
 
-        // 最小化别的窗口会让 Windows 把焦点交给别人，这里把焦点还给游戏。
-        if (hidAny)
-            Win32.RestoreGameFocus();
+        // 这里**不**去抢焦点：SetForegroundWindow 在我们不是前台进程时会失败，
+        // 而 Windows 会把"有人想让这个窗口到前台"渲染成任务栏按钮闪红光 —— 实测会一直闪。
+        // 收窗口本身不该动焦点，游戏自己会处理失焦/回焦。
+        _ = hidAny;
     }
 
     private void EndFocusLocked()
