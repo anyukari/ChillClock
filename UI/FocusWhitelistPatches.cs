@@ -39,9 +39,10 @@ internal static class FocusWhitelistActivatePatch
 /// 点击聪音的反应。默认不接管（走游戏原逻辑）；打开 ClickReaction 后，
 /// 满足条件时用我们池子里的台词回应，并跳过游戏原本的反应。
 ///
-/// 返回 true 表示已接管：把 __result 置 true 让点击流程以为"已响应"
-/// （否则它会走"现在点不动"的反馈），同时 return false 跳过原方法，
-/// 这样游戏自己的反应状态机不会被启动。
+/// 三种走法：
+///   已接管   -> __result = true（点击流程认为"已响应"），跳过原方法
+///   现在不能 -> __result = false（触发游戏自己的"现在不能反应"反馈，就是那个禁止光标），跳过原方法
+///   不管     -> 走游戏原逻辑
 /// </summary>
 internal static class ClickReactionPatch
 {
@@ -49,11 +50,20 @@ internal static class ClickReactionPatch
         Bulbul.FacilityClickHeroine.ReactionType reactionType,
         ref bool __result)
     {
-        if (!Plugin.Instance.TryTakeOverClickReaction(reactionType))
-            return true;
+        switch (Plugin.Instance.HandleClickReaction(reactionType))
+        {
+            case ClickReactionResult.TakeOver:
+                __result = true;
+                return false;
 
-        __result = true;
-        return false;
+            case ClickReactionResult.Blocked:
+                // 她正在说话（我们这边的台词还没完），照游戏自己的规矩：现在点不动
+                __result = false;
+                return false;
+
+            default:
+                return true;
+        }
     }
 }
 

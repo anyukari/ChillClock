@@ -480,22 +480,37 @@ public sealed class Plugin : BaseUnityPlugin
     }
 
     /// <summary>
-    /// 点击反应的接管判断：开关、状态、以及我们的候选池都得满足。
-    /// 任一条不满足就返回 false，让游戏走它自己的反应。
+    /// 点击反应的处理结果。
     /// </summary>
-    internal bool TryTakeOverClickReaction(Bulbul.FacilityClickHeroine.ReactionType reactionType)
+    internal enum ClickReactionResult
+    {
+        /// <summary>不管这次点击，走游戏原逻辑。</summary>
+        PassThrough,
+
+        /// <summary>我们接管了这次点击（已经播出我们的台词）。</summary>
+        TakeOver,
+
+        /// <summary>现在不能反应（她还在说话）——交给游戏播它自己的"点不动"反馈。</summary>
+        Blocked
+    }
+
+    /// <summary>
+    /// 点击反应的处理：开关、状态、以及我们的候选池都得满足才接管。
+    /// 她还在说我们这边的台词时返回 Blocked，让游戏出它的禁止光标，而不是被我们吞掉。
+    /// </summary>
+    internal ClickReactionResult HandleClickReaction(Bulbul.FacilityClickHeroine.ReactionType reactionType)
     {
         if (!_clickReaction.Value)
-            return false;
+            return ClickReactionResult.PassThrough;
         if (_voiceManager == null || !_voiceReminders.Value || !_masterEnabled.Value)
-            return false;
+            return ClickReactionResult.PassThrough;
 
         // 只接管"玩家点击"，不碰她自发的 HeroineSelf
         if (reactionType != Bulbul.FacilityClickHeroine.ReactionType.Click)
-            return false;
+            return ClickReactionResult.PassThrough;
 
         if (!HeroineActionBridge.CanTakeOverClickReaction())
-            return false;
+            return ClickReactionResult.PassThrough;
 
         var state = _focusActive
             ? "Work"
@@ -503,15 +518,15 @@ public sealed class Plugin : BaseUnityPlugin
 
         var result = _voiceManager.PlayClick(state);
         if (result == VoiceStartResult.Started)
-            return true;
+            return ClickReactionResult.TakeOver;
 
-        // Deferred = 我们这边还在说（或游戏正忙）。这时候也要接管，
-        // 否则游戏会紧接着播它自己的那句反应，听起来就是两条语音叠在一起。
+        // Deferred = 她还在说（我们的台词没完）。这时按游戏自己的规矩"现在不能点"，
+        // 让点击流程走那个禁止反馈；既不会插新台词，也不会让游戏叠一条它自己的话。
         if (result == VoiceStartResult.Deferred)
-            return true;
+            return ClickReactionResult.Blocked;
 
         // Skipped（冷却中 / 池子空）才让游戏走它自己的反应
-        return false;
+        return ClickReactionResult.PassThrough;
     }
 
     private bool OnWantsToQuit()
