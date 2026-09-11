@@ -50,7 +50,11 @@ internal sealed class GameSubtitle : MonoBehaviour
         // 游戏正在用这个字幕框时不要抢：抢过来会把它的 _isActiveNormalText 状态搅乱，
         // 而游戏的剧情脚本是 "if (!IsActiveNormalText()) ActivateNormalText();"，
         // 状态一乱它就不会再激活自己的字幕框了。
-        if (IsGameUsingSubtitle())
+        //
+        // 但如果是**我们自己**正开着（连播的上一句），那必须能接手：
+        // 否则联动台词从第二句起就没有字幕。_routine != null 就是我们自己在显示的标志。
+        var ours = _routine != null;
+        if (!ours && IsGameUsingSubtitle())
             return;
 
         try

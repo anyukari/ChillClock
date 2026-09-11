@@ -502,10 +502,16 @@ public sealed class Plugin : BaseUnityPlugin
             : (IsPomodoroSessionActive() ? "Break" : "Normal");
 
         var result = _voiceManager.PlayClick(state);
-        if (result != VoiceStartResult.Started)
-            return false;
+        if (result == VoiceStartResult.Started)
+            return true;
 
-        return true;
+        // Deferred = 我们这边还在说（或游戏正忙）。这时候也要接管，
+        // 否则游戏会紧接着播它自己的那句反应，听起来就是两条语音叠在一起。
+        if (result == VoiceStartResult.Deferred)
+            return true;
+
+        // Skipped（冷却中 / 池子空）才让游戏走它自己的反应
+        return false;
     }
 
     private bool OnWantsToQuit()
