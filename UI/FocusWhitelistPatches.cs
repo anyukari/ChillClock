@@ -52,11 +52,11 @@ internal static class ClickReactionPatch
     {
         switch (Plugin.Instance.HandleClickReaction(reactionType))
         {
-            case ClickReactionResult.TakeOver:
+            case Plugin.ClickReactionResult.TakeOver:
                 __result = true;
                 return false;
 
-            case ClickReactionResult.Blocked:
+            case Plugin.ClickReactionResult.Blocked:
                 // 她正在说话（我们这边的台词还没完），照游戏自己的规矩：现在点不动
                 __result = false;
                 return false;
