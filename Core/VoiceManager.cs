@@ -347,6 +347,16 @@ internal sealed class VoiceManager
                 }
 
                 yield return new WaitForSecondsRealtime(gap);
+
+                // 等上一句字幕真的收掉再开口（含打字机还没打完的情况，最多等 8 秒）。
+                // 判据用字幕组件自己的状态，而不是我们估的时长。
+                var waitedSubtitle = 0f;
+                while (_subtitle != null && _subtitle.IsShowing && waitedSubtitle < 8f)
+                {
+                    waitedSubtitle += Time.unscaledDeltaTime;
+                    yield return null;
+                }
+
                 firstLine = false;
             }
         }

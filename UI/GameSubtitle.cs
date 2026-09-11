@@ -32,6 +32,9 @@ internal sealed class GameSubtitle : MonoBehaviour
     private MethodInfo _startText;
     private MethodInfo _isActiveNormalText;
     private Coroutine _routine;
+    private bool _textShowed;
+    private MethodInfo _clearTextShowed;
+    private MethodInfo _addTextShowed;
     private float _nextLookup;
     private bool _warned;
 
@@ -82,6 +85,25 @@ internal sealed class GameSubtitle : MonoBehaviour
 
             _startText.Invoke(message, new object[] { text });
 
+            // 让游戏自己在"打完了"的时候通知我们（同一条消息上重复注册会叠加，先清掉旧的）
+            _textShowed = false;
+            try
+            {
+                var messageType = message.GetType();
+                if (_addTextShowed == null)
+                {
+                    _clearTextShowed = messageType.GetMethod("ClearOnTextShowedCallback", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    _addTextShowed = messageType.GetMethod("AddOnTextShowedCallback", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                }
+
+                _clearTextShowed?.Invoke(message, null);
+                _addTextShowed?.Invoke(message, new object[] { (Action)OnTextShowed });
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogDebug("[Chill Clock] subtitle callback hook failed: " + e.Message);
+            }
+
             Plugin.Log.LogDebug("[Chill Clock] subtitle show: " + text.Length + " 字 / " +
                                 duration.ToString("0.00") + "s" +
                                 (ours ? "（连播接手）" : ""));
@@ -116,8 +138,28 @@ internal sealed class GameSubtitle : MonoBehaviour
     private IEnumerator HideAfter(float seconds)
     {
         yield return new WaitForSecondsRealtime(seconds);
+
+        // 我们按字数和语音长度估的时长可能比游戏打字机的实际速度短（文本速度设置慢的时候），
+        // 结果就是"字幕还没打完就没了"。这里用游戏自己的回调判断到底打完没有：
+        // 没打完就继续等（最多再等 10 秒），打完后再留 0.6 秒阅读时间。
+        var extra = 0f;
+        while (!_textShowed && extra < 10f)
+        {
+            extra += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        if (_textShowed)
+            yield return new WaitForSecondsRealtime(0.6f);
+
         _routine = null;
         Hide();
+    }
+
+    /// <summary>游戏那边的打字机打完时会调这个（Bulbul.ScenarioTextMessage 的 OnTextShowed 回调）。</summary>
+    private void OnTextShowed()
+    {
+        _textShowed = true;
     }
 
     private void Hide()
