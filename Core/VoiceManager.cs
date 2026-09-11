@@ -328,9 +328,20 @@ internal sealed class VoiceManager
                 PlayLine(file, clip, firstLine);
 
                 // 口型跟着"真正在出声"的时间段走，台词中间的停顿会闭嘴
-                yield return DriveMouth(clip, _catalog.TryGetValue(file, out var line) ? line : null);
+                var line = _catalog.TryGetValue(file, out var found) ? found : null;
+                yield return DriveMouth(clip, line);
 
-                yield return new WaitForSecondsRealtime(ChainGap);
+                // 下一句开口前，先让上一句的字幕读得完：
+                // 短句（语音 1.5 秒、字幕要停 2.5 秒）以前会被下一句直接顶掉，看着就是"一闪"。
+                var gap = ChainGap;
+                if (line != null)
+                {
+                    var english = string.IsNullOrEmpty(line.English) ? line.Japanese : line.English;
+                    var text = LocalizedText.Pick(line.Chinese, english, line.Japanese);
+                    gap = Mathf.Max(gap, GameSubtitle.DisplaySeconds(text, clip.length) - clip.length);
+                }
+
+                yield return new WaitForSecondsRealtime(gap);
                 firstLine = false;
             }
         }

@@ -73,14 +73,25 @@ internal sealed class GameSubtitle : MonoBehaviour
             // 游戏的字幕是逐字打出来的（Febucci 打字机，速度跟随游戏文本速度设置）。
             // 之前只按 0.06 秒/字留时间，短语音（2 秒左右）会"字幕一闪就没了"，
             // 长句子也常常打不完。现在：语音时长 + 1 秒收尾，并且按 0.16 秒/字兜底。
-            var seconds = Mathf.Max(duration + 1f, text.Length * 0.16f);
-            _routine = StartCoroutine(HideAfter(Mathf.Clamp(seconds, 2.5f, 20f)));
+            _routine = StartCoroutine(HideAfter(DisplaySeconds(text, duration)));
         }
         catch (Exception e)
         {
             Plugin.Log.LogWarning("[Chill Clock] native subtitle failed: " + e.Message);
             Reset();
         }
+    }
+
+    /// <summary>
+    /// 这条字幕应该停留多久。Show() 和语音连播的句间停顿都用它，
+    /// 这样下一句开口之前，上一句的字幕一定读得完（联动台词里短句最容易"一闪而过"）。
+    /// </summary>
+    public static float DisplaySeconds(string text, float duration)
+    {
+        if (string.IsNullOrEmpty(text))
+            return 2.5f;
+
+        return Mathf.Clamp(Mathf.Max(duration + 1f, text.Length * 0.16f), 2.5f, 20f);
     }
 
     private IEnumerator HideAfter(float seconds)
@@ -98,6 +109,10 @@ internal sealed class GameSubtitle : MonoBehaviour
         // 必须无条件收尾：Show 时我们调了 ActivateNormalText（把 _isActiveNormalText 置 true），
         // 游戏自己的剧情脚本是 "if (!IsActiveNormalText()) ActivateNormalText();"，
         // 这里不收尾的话那个标记会一直留在 true，游戏之后就不再激活自己的字幕框，剧情状态错位。
+        //
+        // 也不能因为"游戏正在说话"就跳过收尾（之前那样试过）：那样标记会卡在 true，
+        // 而我们自己的 Show 又有一条"不是自己在显示就别抢"的保护 ——
+        // 结果就是后面每一句都没有字幕（实测过）。
         try
         {
             // onEndAction 传 null：游戏那边会自己判空
