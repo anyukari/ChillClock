@@ -86,10 +86,12 @@ internal static class PomodoroTimerEndPatch
         Plugin.Instance?.AttachPomodoroService(__instance);
         try
         {
-            var type = __instance.CurrentPomodoroType;
-            if (type == Bulbul.PomodoroService.PomodoroType.Work)
-            {
-                Plugin.Instance?.OnBreakStarted();
+        var type = __instance.CurrentPomodoroType;
+        if (type == Bulbul.PomodoroService.PomodoroType.Work)
+        {
+            // 到点了：游戏马上要让她自己说一句，先把我们这边正在说的那句掐掉，免得两边叠着
+            Plugin.Instance?.AbortVoiceForGameLine();
+            Plugin.Instance?.OnBreakStarted();
                 Plugin.Instance?.SetFocusFromEvent(false);
             }
             else if (type == Bulbul.PomodoroService.PomodoroType.Break)

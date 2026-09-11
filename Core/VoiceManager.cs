@@ -63,6 +63,7 @@ internal sealed class VoiceManager
     private byte[] _packBytes;
     private readonly HashSet<string> _packNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     private bool _chainRunning;
+    private bool _abortRequested;
     private string _lastPlayed;
     private float _nextAttempt;
     private bool _nextIsClick;
@@ -170,6 +171,31 @@ internal sealed class VoiceManager
         return archive.Entries.Count;
     }
 
+    /// <summary>
+    /// 立刻停掉我们正在说的这句，并把口型/视线收干净。
+    ///
+    /// 用在两种情况：番茄钟到点（游戏马上要自己开口）、以及发现游戏已经在说话。
+    /// 否则两边会叠在一起。
+    /// </summary>
+    public void Abort()
+    {
+        if (!_chainRunning && !_source.isPlaying)
+            return;
+
+        _abortRequested = true;
+        try
+        {
+            _source.Stop();
+        }
+        catch
+        {
+            // ignore
+        }
+
+        HeroineActionBridge.SetMouthTalk(false);
+        HeroineActionBridge.EndLineReaction();
+    }
+
     /// <summary>退出时丢开语音包。</summary>
     public void Dispose()
     {
@@ -249,6 +275,7 @@ internal sealed class VoiceManager
 
         _nextTimes[trigger] = now + cooldown + (chain.Count > 1 ? chain.Count * 4.5f : 0f);
         _gestureChance = GestureChanceFor(trigger);
+        _abortRequested = false;
         _runner.StartCoroutine(PlayChain(chain));
         return VoiceStartResult.Started;
     }
@@ -390,6 +417,15 @@ internal sealed class VoiceManager
         var speaking = true;
         while (elapsed < clip.length)
         {
+            // 游戏自己开口了就马上停我们这边，别两边叠着说
+            if (_abortRequested || HeroineActionBridge.IsGameVoiceBusy())
+            {
+                if (speaking)
+                    HeroineActionBridge.SetMouthTalk(false);
+                _source.Stop();
+                yield break;
+            }
+
             var shouldTalk = InSpans(spans, elapsed);
             if (shouldTalk != speaking)
             {

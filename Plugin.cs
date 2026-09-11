@@ -439,6 +439,19 @@ public sealed class Plugin : BaseUnityPlugin
         _pendingRestVoice = true;
     }
 
+    /// <summary>游戏马上要/正在自己说话时，把我们这边正在播的台词停掉（避免叠音）。</summary>
+    internal void AbortVoiceForGameLine()
+    {
+        try
+        {
+            _voiceManager?.Abort();
+        }
+        catch (Exception e)
+        {
+            Logger.LogWarning("[Chill Clock] abort voice failed: " + e.Message);
+        }
+    }
+
     internal void AttachPomodoroService(Bulbul.PomodoroService service)
     {
         _pomodoroServiceInstance = service;
