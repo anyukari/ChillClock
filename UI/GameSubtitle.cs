@@ -41,14 +41,23 @@ internal sealed class GameSubtitle : MonoBehaviour
     public void Show(string text, float duration)
     {
         if (string.IsNullOrWhiteSpace(text))
+        {
+            Plugin.Log.LogDebug("[Chill Clock] subtitle skipped: 文本为空");
             return;
+        }
 
         // 游戏自己在演出时不要抢字幕框（它可能正在显示自己的台词）
         if (HeroineActionBridge.IsGameSequenceBusy())
+        {
+            Plugin.Log.LogDebug("[Chill Clock] subtitle skipped: 游戏在放演出");
             return;
+        }
 
         if (!EnsureUi())
+        {
+            Plugin.Log.LogDebug("[Chill Clock] subtitle skipped: 拿不到字幕 UI");
             return;
+        }
 
         // 游戏正在用这个字幕框时不要抢：抢过来会把它的 _isActiveNormalText 状态搅乱，
         // 而游戏的剧情脚本是 "if (!IsActiveNormalText()) ActivateNormalText();"，
@@ -58,7 +67,10 @@ internal sealed class GameSubtitle : MonoBehaviour
         // 否则联动台词从第二句起就没有字幕。_routine != null 就是我们自己在显示的标志。
         var ours = _routine != null;
         if (!ours && IsGameUsingSubtitle())
+        {
+            Plugin.Log.LogDebug("[Chill Clock] subtitle skipped: 字幕框被游戏占用");
             return;
+        }
 
         try
         {
@@ -69,6 +81,10 @@ internal sealed class GameSubtitle : MonoBehaviour
                 return;
 
             _startText.Invoke(message, new object[] { text });
+
+            Plugin.Log.LogDebug("[Chill Clock] subtitle show: " + text.Length + " 字 / " +
+                                duration.ToString("0.00") + "s" +
+                                (ours ? "（连播接手）" : ""));
 
             if (_routine != null)
                 StopCoroutine(_routine);
