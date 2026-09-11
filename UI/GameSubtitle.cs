@@ -35,6 +35,9 @@ internal sealed class GameSubtitle : MonoBehaviour
     private float _nextLookup;
     private bool _warned;
 
+    /// <summary>我们这边的字幕是不是还在显示（= 这句台词还没结束）。</summary>
+    public bool IsShowing => _routine != null;
+
     public void Show(string text, float duration)
     {
         if (string.IsNullOrWhiteSpace(text))

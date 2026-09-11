@@ -207,6 +207,11 @@ internal sealed class VoiceManager
         if (_source == null || _runner == null || _chainRunning || _source.isPlaying)
             return VoiceStartResult.Deferred;
 
+        // 上一句的字幕还在显示 = 她还没说完。这时候不开口（点击也是一样），
+        // 免得新句子把上一句的字幕顶掉、或者两句叠在一起。
+        if (_subtitle != null && _subtitle.IsShowing)
+            return VoiceStartResult.Deferred;
+
         var now = Time.realtimeSinceStartup;
         if (now < _nextAttempt)
             return VoiceStartResult.Deferred;
