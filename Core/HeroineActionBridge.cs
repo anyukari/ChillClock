@@ -379,9 +379,6 @@ internal static class HeroineActionBridge
         }
     }
 
-    /// <summary>念台词时"换成手势动作"的概率，其余时候她照旧干活、只转头。</summary>
-    private const int GestureChancePercent = 20;
-
     /// <summary>
     /// 点击时转头的幅度。游戏自己的数据里就是三种（实测日志）：
     ///   look = 1    整个头转过来看你
@@ -439,9 +436,11 @@ internal static class HeroineActionBridge
     /// 休息、听音乐、在沙发上、离席这些时候她手里有别的事（看书、喝茶、发呆），
     /// 我们只换表情，不去碰她的动作和视线。
     ///
+    /// setLook 只在连播组的第一句为 true —— 每句都转头会看着像来回扭头。
+    /// gestureChancePercent 由调用方按池子给：提醒类台词（走神/任务管理器/退出）一律 0。
     /// 返回值表示这次有没有动过她的视线（调用方负责说完再放回去）。
     /// </summary>
-    public static bool Play(string emotion, bool isClickReaction)
+    public static bool Play(string emotion, bool isClickReaction, bool setLook, int gestureChancePercent)
     {
         if (!Enabled || IsGameSequenceBusy())
             return false;
@@ -449,7 +448,7 @@ internal static class HeroineActionBridge
         // ActionStateType 17/18/19 = WorkPC / WorkBook / WorkReport，也就是"在桌前干活"
         var atDesk = IsWorkingAtDesk();
 
-        if ((atDesk || isClickReaction) && Rng.Next(100) < GestureChancePercent)
+        if ((atDesk || isClickReaction) && gestureChancePercent > 0 && Rng.Next(100) < gestureChancePercent)
             PlayGesture(emotion);
 
         if (emotion != null && EmotionFacials.TryGetValue(emotion, out var facial))
@@ -458,7 +457,7 @@ internal static class HeroineActionBridge
             _lineTouchedFacial = true;
         }
 
-        if (!atDesk && !isClickReaction)
+        if (!setLook || (!atDesk && !isClickReaction))
             return false;
 
         SetLookAtPlayer(true);
@@ -520,7 +519,7 @@ internal static class HeroineActionBridge
 
     /// <summary>
     /// 播放一个情绪对应的身体动作。会把她手头的活打断（换到别的动作段），
-    /// 所以只在少数时候用，见 GestureChancePercent。
+    /// 所以只在少数时候用（走神/任务管理器/退出这几个池子完全不碰）。
     /// </summary>
     private static void PlayGesture(string emotion)
     {

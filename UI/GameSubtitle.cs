@@ -67,9 +67,10 @@ internal sealed class GameSubtitle : MonoBehaviour
                 StopCoroutine(_routine);
 
             // 游戏的字幕是逐字打出来的（Febucci 打字机，速度跟随游戏文本速度设置）。
-            // 语音只有 2~4 秒，长句子可能还没打完就淡出，这里按字数补一个下限。
-            var seconds = Mathf.Max(duration, text.Length * 0.06f);
-            _routine = StartCoroutine(HideAfter(Mathf.Clamp(seconds, 1.2f, 12f)));
+            // 之前只按 0.06 秒/字留时间，短语音（2 秒左右）会"字幕一闪就没了"，
+            // 长句子也常常打不完。现在：语音时长 + 1 秒收尾，并且按 0.16 秒/字兜底。
+            var seconds = Mathf.Max(duration + 1f, text.Length * 0.16f);
+            _routine = StartCoroutine(HideAfter(Mathf.Clamp(seconds, 2.5f, 20f)));
         }
         catch (Exception e)
         {

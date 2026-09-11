@@ -66,6 +66,7 @@ internal sealed class VoiceManager
     private string _lastPlayed;
     private float _nextAttempt;
     private bool _nextIsClick;
+    private int _gestureChance;
 
     public VoiceManager(GameObject host)
     {
@@ -242,8 +243,27 @@ internal sealed class VoiceManager
             : new List<string> { start };
 
         _nextTimes[trigger] = now + cooldown + (chain.Count > 1 ? chain.Count * 4.5f : 0f);
+        _gestureChance = GestureChanceFor(trigger);
         _runner.StartCoroutine(PlayChain(chain));
         return VoiceStartResult.Started;
+    }
+
+    /// <summary>
+    /// 各池子"顺便做个动作"的概率。
+    /// 提醒类（走神 / 任务管理器 / 退出）一律不做动作 —— 那时候她该看着你说话，
+    /// 而不是换姿势；闲聊和点击才偶尔来一下。
+    /// </summary>
+    private static int GestureChanceFor(string trigger)
+    {
+        switch (trigger)
+        {
+            case "Distraction":
+            case "TaskManager":
+            case "Exit":
+                return 0;
+            default:
+                return 10;
+        }
     }
 
     /// <summary>
@@ -289,6 +309,8 @@ internal sealed class VoiceManager
         _chainRunning = true;
         try
         {
+            // 连播组只在第一句转头：每句都转一次头会看着像"来回扭头"
+            var firstLine = true;
             foreach (var file in files)
             {
                 RequestClip(file);
@@ -303,12 +325,13 @@ internal sealed class VoiceManager
                 if (clip == null)
                     continue;
 
-                PlayLine(file, clip);
+                PlayLine(file, clip, firstLine);
 
                 // 口型跟着"真正在出声"的时间段走，台词中间的停顿会闭嘴
                 yield return DriveMouth(clip, _catalog.TryGetValue(file, out var line) ? line : null);
 
                 yield return new WaitForSecondsRealtime(ChainGap);
+                firstLine = false;
             }
         }
         finally
@@ -371,7 +394,7 @@ internal sealed class VoiceManager
     /// 播放一条语音。优先把音频交给游戏自己的语音系统（这样音量走游戏设置），
     /// 拿不到时才退回自己的 AudioSource。口型一律由我们自己开关。
     /// </summary>
-    private void PlayLine(string fileName, AudioClip clip)
+    private void PlayLine(string fileName, AudioClip clip, bool firstLineOfChain)
     {
         var clipName = Path.GetFileNameWithoutExtension(fileName);
         var native = false;
@@ -395,8 +418,8 @@ internal sealed class VoiceManager
             return;
 
         // 念台词时按游戏自己的规则来（她干活时不动身体、只转头；不在干活时只换表情），
-        // 链子结束时统一把视线放回去。
-        HeroineActionBridge.Play(line.Emotion, _nextIsClick);
+        // 链子结束时统一把视线放回去。连播组只在第一句转头。
+        HeroineActionBridge.Play(line.Emotion, _nextIsClick, firstLineOfChain, _gestureChance);
         _nextIsClick = false;
 
         // 英文还没翻译完时，英语用户至少能看到日文原文，不至于空字幕
