@@ -18,7 +18,7 @@ public sealed class Plugin : BaseUnityPlugin
 {
     public const string Guid = "com.chillclock.plugin";
     public const string Name = "Chill Clock";
-    public const string Version = "0.6.0";
+    public const string Version = "0.7.0";
 
     internal static ManualLogSource Log = null!;
     internal static Plugin Instance = null!;
@@ -47,6 +47,7 @@ public sealed class Plugin : BaseUnityPlugin
     private bool _subscribed;
     private CompositeDisposable _subscriptions;
     private float _nextCoreTick;
+    private float _nextGuardSweep;
     private bool _pendingDistractionVoice;
     private bool _pendingTaskManagerVoice;
     private bool _pendingExitVoice;
@@ -153,6 +154,16 @@ public sealed class Plugin : BaseUnityPlugin
             var reactionReady = AccessTools.Method(typeof(Bulbul.FacilityClickHeroine), "ReactionReady");
             if (reactionReady != null)
                 _harmony.Patch(reactionReady, prefix: PatchMethod("ClickReactionPatch", "Prefix"));
+
+            // 游戏自己要开口时先让我们闭嘴（HeroineAI 在全局命名空间，只能按名字找）
+            var heroineAiType = AccessTools.TypeByName("HeroineAI");
+            var playVoice = heroineAiType == null
+                ? null
+                : AccessTools.Method(heroineAiType, "PlayVoice", new[] { typeof(string), typeof(bool), typeof(bool) });
+            if (playVoice != null)
+                _harmony.Patch(playVoice, prefix: PatchMethod("HeroineVoicePatch", "Prefix"));
+            else
+                Logger.LogWarning("HeroineAI.PlayVoice not found; 游戏开口时不会主动让路");
 
             var patched = _harmony.GetPatchedMethods()
                 .Select(m => m.DeclaringType?.Name + "." + m.Name)
@@ -332,14 +343,21 @@ public sealed class Plugin : BaseUnityPlugin
             }
 
             // 巡逻不依赖 DI：事件一旦开启专注，就持续每 0.2 秒扫描并隐藏。
-            if (_focusActive)
+            // 扫窗口本身要挨个问 DWM / 进程信息，是主线程上最贵的一件周期活，
+            // 所以它单独按 0.5 秒的节奏跑（晚半秒收起新开的窗口，换来的是不掉帧）。
+            if (now >= _nextGuardSweep)
             {
-                _guard.Tick();
-            }
-            else if (IsPomodoroSessionActive())
-            {
-                // 休息阶段不再最小化普通应用，但继续关闭任务管理器。
-                _guard.TickTaskManagerOnly();
+                _nextGuardSweep = now + 0.5f;
+
+                if (_focusActive)
+                {
+                    _guard.Tick();
+                }
+                else if (IsPomodoroSessionActive())
+                {
+                    // 休息阶段不再最小化普通应用，但继续关闭任务管理器。
+                    _guard.TickTaskManagerOnly();
+                }
             }
 
             var known = _watcher.TryGetWorkActive(out var workActive);

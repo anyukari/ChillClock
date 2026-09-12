@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Reflection;
 using UnityEngine;
 
@@ -142,6 +143,9 @@ internal static class HeroineActionBridge
     private static object _voiceManager;
     private static IDictionary _voiceClips;
     private static MethodInfo _voiceManagerPlay;
+
+    /// <summary>我们最近一次交给游戏语音系统（VoiceManager）播的那条挂在哪个 player 上。</summary>
+    private static object _nativePlayer;
 
     /// <summary>
     /// 游戏是不是正在放它自己的演出。
@@ -613,8 +617,12 @@ internal static class HeroineActionBridge
         {
             _voiceClips[clipName] = clip;
             injected = true;
-            if (PlayThroughVoiceManager(clipName))
+            var player = PlayThroughVoiceManager(clipName);
+            if (player != null)
+            {
+                _nativePlayer = player;
                 return true;
+            }
         }
         catch (Exception e)
         {
@@ -637,15 +645,69 @@ internal static class HeroineActionBridge
         return false;
     }
 
-    private static bool PlayThroughVoiceManager(string clipName)
+    private static object PlayThroughVoiceManager(string clipName)
     {
         if (_voiceManagerPlay == null || _voiceManager == null)
-            return false;
+            return null;
 
-        var player = _voiceManagerPlay.Invoke(
+        return _voiceManagerPlay.Invoke(
             _voiceManager,
             new object[] { clipName, 1f, 0f, 1f, false, null, string.Empty, null });
-        return player != null;
+    }
+
+    /// <summary>
+    /// 立刻停掉我们那条走游戏语音系统播的语音。
+    ///
+    /// 为什么需要它：游戏每次自己开口（剧情台词、野生动作的碎碎念……）都会先
+    /// VoiceManager.Stop()，那一下会把它自己管理的所有 voice player 一起停掉 ——
+    /// 我们借它播的语音也在里面。我们自己那边只有一个 AudioSource，停它没用，
+    /// 必须把拿到手的这个 player 也停掉，否则会出现"音频已经被游戏掐断，
+    /// 我们却还在等它放完 / 接着念下一句"的情况。
+    /// </summary>
+    public static void StopNativeVoice()
+    {
+        var player = _nativePlayer;
+        _nativePlayer = null;
+        if (player == null)
+            return;
+
+        try
+        {
+            var stop = player.GetType().GetMethod(
+                "Stop", BindingFlags.Instance | BindingFlags.Public, null, Type.EmptyTypes, null);
+            stop?.Invoke(player, null);
+        }
+        catch (Exception e)
+        {
+            Plugin.Log.LogWarning("[Chill Clock] stop native voice failed: " + e.Message);
+        }
+    }
+
+    /// <summary>
+    /// 我们那条语音在游戏语音系统里是不是还在响。
+    ///
+    /// 游戏自己开口时会把它 Stop 掉，这时候 isPlaying 就变 false —— 用它来判断
+    /// "我们的话被游戏掐了"，比按时间估准得多。问不出来时按"还在放"处理，
+    /// 免得误伤正常播放。
+    /// </summary>
+    public static bool IsNativeVoicePlaying()
+    {
+        var player = _nativePlayer;
+        if (player == null)
+            return false;
+
+        try
+        {
+            var prop = player.GetType().GetProperty("AudioSource", BindingFlags.Instance | BindingFlags.Public);
+            if (prop?.GetValue(player) is AudioSource source && source != null)
+                return source.isPlaying;
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return true;
     }
 
     // ---------- 解析 ----------
@@ -866,6 +928,7 @@ internal static class HeroineActionBridge
 
     private static MonoBehaviour FindBehaviour(string typeFullName)
     {
+        var watch = Stopwatch.StartNew();
         try
         {
             foreach (var component in UnityEngine.Object.FindObjectsOfType<MonoBehaviour>())
@@ -877,6 +940,11 @@ internal static class HeroineActionBridge
         catch (Exception e)
         {
             Plugin.Log.LogWarning("[Chill Clock] " + typeFullName + " lookup failed: " + e.Message);
+        }
+        finally
+        {
+            // 这是全场景扫描，慢了就是掉帧的直接原因
+            PerfProbe.Mark("全场景查找 " + typeFullName, watch);
         }
 
         return null;

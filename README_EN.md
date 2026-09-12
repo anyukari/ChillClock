@@ -53,6 +53,7 @@ A BepInEx plugin for *Chill with You : Lo-Fi Story*: **when Satone is focusing, 
 2. **Install the Mod**
    - Download the latest `ChillClock.dll` from Releases.
    - Put `ChillClock.dll` into `BepInEx/plugins/`.
+   - Upgrading from an older build? Just **overwrite** that same `ChillClock.dll`. Do not keep two differently-named copies of this plugin in `plugins/` — BepInEx would load the whole plugin twice.
    - Your folder structure should look like this:
 
 ```

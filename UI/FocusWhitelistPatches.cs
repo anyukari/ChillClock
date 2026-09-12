@@ -19,6 +19,21 @@ internal static class FocusWhitelistSetupPatch
     }
 }
 
+/// <summary>
+/// 游戏自己要开口（剧情台词、野生动作的碎碎念、点击反应语音……）时，先把我们这边收干净。
+///
+/// 游戏的 HeroineVoiceController.PlayVoice 一上来就 VoiceManager.Stop()，那一下会把它
+/// 管理的所有 voice player 一起停掉 —— 我们的语音是借它播的，也会被掐掉一半。
+/// 与其让它掐一半（音频断了、字幕还挂着、连播的第二句还接着念），不如我们主动停。
+/// </summary>
+internal static class HeroineVoicePatch
+{
+    private static void Prefix()
+    {
+        Plugin.Instance?.AbortVoiceForGameLine();
+    }
+}
+
 [HarmonyPatch(typeof(SettingUI), "Activate")]
 internal static class FocusWhitelistActivatePatch
 {

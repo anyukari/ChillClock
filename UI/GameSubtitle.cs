@@ -41,6 +41,30 @@ internal sealed class GameSubtitle : MonoBehaviour
     /// <summary>我们这边的字幕是不是还在显示（= 这句台词还没结束）。</summary>
     public bool IsShowing => _routine != null;
 
+    /// <summary>
+    /// 立刻收掉字幕，不等它自己到点。
+    ///
+    /// 用在台词被游戏打断的时候：音频已经被游戏掐掉了，字幕却还挂着几秒，
+    /// 看着就像"话说完了字幕还在"。没在显示时什么都不做（别去动游戏的框）。
+    /// </summary>
+    public void HideNow()
+    {
+        if (_routine == null)
+            return;
+
+        try
+        {
+            StopCoroutine(_routine);
+        }
+        catch
+        {
+            // ignore
+        }
+
+        _routine = null;
+        Hide();
+    }
+
     public void Show(string text, float duration)
     {
         if (string.IsNullOrWhiteSpace(text))

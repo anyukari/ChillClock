@@ -35,7 +35,11 @@ internal enum VoiceStartResult
 /// </summary>
 internal sealed class VoiceManager
 {
-    private const int MaxCachedClips = 40;
+    /// <summary>
+    /// 解码好的语音缓存条数。一条 3 秒的语音解码后大约 0.5MB，64 条 ≈ 30MB。
+    /// 缓存太小的话，点着点着就要反复"解包 → 解码"，那一步会卡帧。
+    /// </summary>
+    private const int MaxCachedClips = 64;
     private const float ChainGap = 0.42f;
 
     /// <summary>
@@ -64,6 +68,8 @@ internal sealed class VoiceManager
     private readonly HashSet<string> _packNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     private bool _chainRunning;
     private bool _abortRequested;
+    /// <summary>当前这句是不是走游戏语音系统播的（决定"还在不在响"该问谁）。</summary>
+    private bool _playingNative;
     private string _lastPlayed;
     private float _nextAttempt;
     private bool _nextIsClick;
@@ -179,13 +185,39 @@ internal sealed class VoiceManager
     /// </summary>
     public void Abort()
     {
-        if (!_chainRunning && !_source.isPlaying)
+        if (!_chainRunning && !_source.isPlaying && !HeroineActionBridge.IsNativeVoicePlaying())
             return;
 
+        Interrupt();
+    }
+
+    /// <summary>
+    /// 立刻闭嘴：停掉我们的音频（不管它是走游戏语音系统还是走自己的 AudioSource）、
+    /// 收掉字幕、关掉口型，并且让连播里还没说的句子作废。
+    ///
+    /// 为什么要连"游戏语音系统里那条"一起停：我们的语音是借游戏自己的 VoiceManager 播的，
+    /// 而游戏每次自己开口都会先 VoiceManager.Stop()，那一下会把它管的所有 voice player
+    /// 全停掉——我们的也在其中。以前这里只停自己的 AudioSource，于是音频已经被游戏掐断，
+    /// 连播的第二句却还照念：听感就是"话说一半断了，等她的动作完了又接上后半段"。
+    /// </summary>
+    private void Interrupt()
+    {
         _abortRequested = true;
+
         try
         {
             _source.Stop();
+        }
+        catch
+        {
+            // ignore
+        }
+
+        HeroineActionBridge.StopNativeVoice();
+
+        try
+        {
+            _subtitle?.HideNow();
         }
         catch
         {
@@ -345,6 +377,17 @@ internal sealed class VoiceManager
             var firstLine = true;
             foreach (var file in files)
             {
+                // 上一句被游戏打断了（她去喝茶吹气、说自己的台词……），连播剩下的不说了
+                if (_abortRequested)
+                    break;
+
+                // 游戏自己正在说话时开口，只会两边叠在一起：这句也一起放弃
+                if (!firstLine && HeroineActionBridge.IsGameVoiceBusy())
+                {
+                    Interrupt();
+                    break;
+                }
+
                 RequestClip(file);
                 var waited = 0f;
                 while (GetClip(file) == null && waited < LoadTimeout)
@@ -408,7 +451,22 @@ internal sealed class VoiceManager
         var spans = line?.TalkSpans;
         if (spans == null || spans.Length < 2)
         {
-            yield return new WaitForSecondsRealtime(Mathf.Max(0.1f, clip.length - MouthTailMargin));
+            // 老语音包没有分段信息：整条开着嘴。但中途被游戏掐了也要立刻收，
+            // 不能傻等一整条放完（那样会出现"声音没了嘴还在动"）。
+            var waited = 0f;
+            var tail = Mathf.Max(0.1f, clip.length - MouthTailMargin);
+            while (waited < tail)
+            {
+                if (IsInterrupted(clip, waited))
+                {
+                    Interrupt();
+                    yield break;
+                }
+
+                waited += Time.unscaledDeltaTime;
+                yield return null;
+            }
+
             HeroineActionBridge.SetMouthTalk(false);
             yield break;
         }
@@ -417,12 +475,9 @@ internal sealed class VoiceManager
         var speaking = true;
         while (elapsed < clip.length)
         {
-            // 游戏自己开口了就马上停我们这边，别两边叠着说
-            if (_abortRequested || HeroineActionBridge.IsGameVoiceBusy())
+            if (IsInterrupted(clip, elapsed))
             {
-                if (speaking)
-                    HeroineActionBridge.SetMouthTalk(false);
-                _source.Stop();
+                Interrupt();
                 yield break;
             }
 
@@ -439,6 +494,29 @@ internal sealed class VoiceManager
 
         if (speaking)
             HeroineActionBridge.SetMouthTalk(false);
+    }
+
+    /// <summary>
+    /// 这句是不是该让路 / 已经废了。判两条：
+    ///
+    ///   1. 游戏自己开口了（剧情台词、野生动作的碎碎念……）：它一开口就先
+    ///      VoiceManager.Stop()，我们那条借它的 player 播的语音会被一起掐掉，
+    ///      继续动嘴只会没声音。
+    ///   2. 我们那条音频确实已经没在响了，而按时间还没到结尾 —— 就是被掐的那一下。
+    ///
+    /// 第 2 条要跳过开头那零点几秒：刚 Play 的同一帧里 Unity 的 isPlaying 还没翻过来，
+    /// 直接判会把每一句都当成"被掐了"。
+    /// </summary>
+    private bool IsInterrupted(AudioClip clip, float elapsed)
+    {
+        if (_abortRequested || HeroineActionBridge.IsGameVoiceBusy())
+            return true;
+
+        if (elapsed < 0.2f || elapsed >= clip.length - 0.25f)
+            return false;
+
+        var alive = _playingNative ? HeroineActionBridge.IsNativeVoicePlaying() : _source.isPlaying;
+        return !alive;
     }
 
     private static bool InSpans(float[] spans, float t)
@@ -471,6 +549,8 @@ internal sealed class VoiceManager
 
         if (!native)
             _source.PlayOneShot(clip);
+
+        _playingNative = native;
 
         // 口型由我们自己开关：VoiceManager.Play 不管这个，
         // 也不能走 HeroineVoiceController.PlayVoice（会把 _isFinishedVoice 卡死）。
@@ -540,6 +620,7 @@ internal sealed class VoiceManager
     private IEnumerator LoadOggFromPack(string file)
     {
         string temp = null;
+        var extractWatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             Directory.CreateDirectory(_tempDir);
@@ -568,6 +649,7 @@ internal sealed class VoiceManager
             yield break;
         }
 
+        PerfProbe.Mark("语音解包", extractWatch);
         yield return LoadOgg(file, temp, true);
     }
 
@@ -579,6 +661,7 @@ internal sealed class VoiceManager
 
         if (request.result == UnityWebRequest.Result.Success)
         {
+            var decodeWatch = System.Diagnostics.Stopwatch.StartNew();
             var clip = DownloadHandlerAudioClip.GetContent(request);
             request.Dispose();
             if (clip != null)
@@ -586,6 +669,7 @@ internal sealed class VoiceManager
                 clip.name = file;
                 if (!clip.LoadAudioData())
                     Plugin.Log.LogWarning("[Chill Clock] LoadAudioData failed: " + file);
+                PerfProbe.Mark("语音解码", decodeWatch);
                 Store(file, clip);
                 if (deleteAfterLoad)
                     TryDelete(path);

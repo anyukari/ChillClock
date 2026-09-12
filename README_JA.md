@@ -53,6 +53,7 @@
 2. **Mod をインストール**
    - Release から最新の `ChillClock.dll` をダウンロードします。
    - `ChillClock.dll` を `BepInEx/plugins/` に配置します。
+   - 旧バージョンからの更新は、同じ `ChillClock.dll` を**上書き**するだけにしてください(名前違いの dll を同時に置くと、BepInEx が同じプラグインを二重に読み込んでしまいます)。
    - フォルダ構成は次のようになります:
 
 ```

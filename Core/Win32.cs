@@ -11,6 +11,12 @@ internal static class Win32
     private const uint ProcessQueryLimitedInformation = 0x1000;
     private const int DwmwaCloaked = 14;
 
+    /// <summary>进程路径缓存的有效期：进程路径基本不变，没必要每轮扫窗口都去问一遍。</summary>
+    private const int ProcessPathCacheMs = 10000;
+
+    private static readonly Dictionary<uint, string> ProcessPaths = new Dictionary<uint, string>();
+    private static readonly Dictionary<uint, int> ProcessPathExpiry = new Dictionary<uint, int>();
+
     private const int GwlExstyle = -20;
     private const long WsExToolwindow = 0x00000080;
     private const long WsExTopmost = 0x00000008;
@@ -281,6 +287,7 @@ internal static class Win32
 
     private static List<WindowInfo> EnumerateWindows(bool onlyVisible, bool includeToolWindows)
     {
+        var watch = Stopwatch.StartNew();
         var collector = new HandleCollector();
         EnumWindows(collector.OnWindow, IntPtr.Zero);
 
@@ -295,14 +302,13 @@ internal static class Win32
                 result.Add(info);
         }
 
+        PerfProbe.Mark("扫窗口", watch);
         return result;
     }
 
     private static WindowInfo BuildWindowInfo(IntPtr hWnd, bool requireVisibleRect, bool includeToolWindows)
     {
         var className = GetText(hWnd, GetClassName);
-        if (IsCloaked(hWnd))
-            return null;
         if (!includeToolWindows && IsToolWindow(hWnd))
             return null;
 
@@ -312,6 +318,11 @@ internal static class Win32
             if (rect.Right - rect.Left <= 0 || rect.Bottom - rect.Top <= 0)
                 return null;
         }
+
+        // DWM 查询每个窗口都要过一趟桌面合成器，是整个扫描里最贵的一步，
+        // 所以放到上面那些便宜的过滤之后再问。
+        if (IsCloaked(hWnd))
+            return null;
 
         GetWindowThreadProcessId(hWnd, out var pid);
         if (pid == 0 || pid == (uint)CurrentProcessId)
@@ -392,6 +403,27 @@ internal static class Win32
     }
 
     private static string TryGetProcessPath(uint pid)
+    {
+        var now = Environment.TickCount;
+        if (ProcessPaths.TryGetValue(pid, out var cached) &&
+            ProcessPathExpiry.TryGetValue(pid, out var expire) && now < expire)
+            return cached;
+
+        var path = QueryProcessPath(pid);
+
+        // PID 复用理论上有读到旧路径的可能，所以缓存只留十秒
+        ProcessPaths[pid] = path;
+        ProcessPathExpiry[pid] = now + ProcessPathCacheMs;
+        if (ProcessPaths.Count > 512)
+        {
+            ProcessPaths.Clear();
+            ProcessPathExpiry.Clear();
+        }
+
+        return path;
+    }
+
+    private static string QueryProcessPath(uint pid)
     {
         var handle = OpenProcess(ProcessQueryLimitedInformation, false, pid);
         if (handle == IntPtr.Zero)

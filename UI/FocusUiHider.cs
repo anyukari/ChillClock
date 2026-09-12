@@ -27,7 +27,7 @@ internal sealed class FocusUiHider
     /// 现在同一轮只扫一次并且缓存这么久；隐藏动作本身仍然每 0.25 秒重放，
     /// 所以游戏把按钮重新打开时照样会被压回去。
     /// </summary>
-    private const float SnapshotSeconds = 1f;
+    private const float SnapshotSeconds = 5f;
 
     private Transform[] _transformSnapshot;
     private float _transformSnapshotExpire;
@@ -243,6 +243,7 @@ internal sealed class FocusUiHider
         if (_transformSnapshot != null && now < _transformSnapshotExpire)
             return _transformSnapshot;
 
+        var watch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             _transformSnapshot = Resources.FindObjectsOfTypeAll<Transform>();
@@ -251,6 +252,7 @@ internal sealed class FocusUiHider
         {
             _transformSnapshot = Array.Empty<Transform>();
         }
+        Core.PerfProbe.Mark("场景扫描 Transform", watch);
 
         _transformSnapshotExpire = now + SnapshotSeconds;
         return _transformSnapshot;
@@ -262,6 +264,7 @@ internal sealed class FocusUiHider
         if (_textSnapshot != null && now < _textSnapshotExpire)
             return _textSnapshot;
 
+        var watch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             _textSnapshot = Resources.FindObjectsOfTypeAll<TMP_Text>();
@@ -270,6 +273,7 @@ internal sealed class FocusUiHider
         {
             _textSnapshot = Array.Empty<TMP_Text>();
         }
+        Core.PerfProbe.Mark("场景扫描 TMP_Text", watch);
 
         _textSnapshotExpire = now + SnapshotSeconds;
         return _textSnapshot;
