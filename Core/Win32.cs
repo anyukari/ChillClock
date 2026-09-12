@@ -287,7 +287,6 @@ internal static class Win32
 
     private static List<WindowInfo> EnumerateWindows(bool onlyVisible, bool includeToolWindows)
     {
-        var watch = Stopwatch.StartNew();
         var collector = new HandleCollector();
         EnumWindows(collector.OnWindow, IntPtr.Zero);
 
@@ -302,7 +301,6 @@ internal static class Win32
                 result.Add(info);
         }
 
-        PerfProbe.Mark("扫窗口", watch);
         return result;
     }
 

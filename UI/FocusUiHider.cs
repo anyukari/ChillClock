@@ -243,7 +243,6 @@ internal sealed class FocusUiHider
         if (_transformSnapshot != null && now < _transformSnapshotExpire)
             return _transformSnapshot;
 
-        var watch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             _transformSnapshot = Resources.FindObjectsOfTypeAll<Transform>();
@@ -252,7 +251,6 @@ internal sealed class FocusUiHider
         {
             _transformSnapshot = Array.Empty<Transform>();
         }
-        Core.PerfProbe.Mark("场景扫描 Transform", watch);
 
         _transformSnapshotExpire = now + SnapshotSeconds;
         return _transformSnapshot;
@@ -264,7 +262,6 @@ internal sealed class FocusUiHider
         if (_textSnapshot != null && now < _textSnapshotExpire)
             return _textSnapshot;
 
-        var watch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             _textSnapshot = Resources.FindObjectsOfTypeAll<TMP_Text>();
@@ -273,7 +270,6 @@ internal sealed class FocusUiHider
         {
             _textSnapshot = Array.Empty<TMP_Text>();
         }
-        Core.PerfProbe.Mark("场景扫描 TMP_Text", watch);
 
         _textSnapshotExpire = now + SnapshotSeconds;
         return _textSnapshot;

@@ -928,7 +928,6 @@ internal static class HeroineActionBridge
 
     private static MonoBehaviour FindBehaviour(string typeFullName)
     {
-        var watch = Stopwatch.StartNew();
         try
         {
             foreach (var component in UnityEngine.Object.FindObjectsOfType<MonoBehaviour>())
@@ -940,11 +939,6 @@ internal static class HeroineActionBridge
         catch (Exception e)
         {
             Plugin.Log.LogWarning("[Chill Clock] " + typeFullName + " lookup failed: " + e.Message);
-        }
-        finally
-        {
-            // 这是全场景扫描，慢了就是掉帧的直接原因
-            PerfProbe.Mark("全场景查找 " + typeFullName, watch);
         }
 
         return null;

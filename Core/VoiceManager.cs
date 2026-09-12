@@ -620,7 +620,6 @@ internal sealed class VoiceManager
     private IEnumerator LoadOggFromPack(string file)
     {
         string temp = null;
-        var extractWatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             Directory.CreateDirectory(_tempDir);
@@ -649,7 +648,6 @@ internal sealed class VoiceManager
             yield break;
         }
 
-        PerfProbe.Mark("语音解包", extractWatch);
         yield return LoadOgg(file, temp, true);
     }
 
@@ -661,7 +659,6 @@ internal sealed class VoiceManager
 
         if (request.result == UnityWebRequest.Result.Success)
         {
-            var decodeWatch = System.Diagnostics.Stopwatch.StartNew();
             var clip = DownloadHandlerAudioClip.GetContent(request);
             request.Dispose();
             if (clip != null)
@@ -669,7 +666,6 @@ internal sealed class VoiceManager
                 clip.name = file;
                 if (!clip.LoadAudioData())
                     Plugin.Log.LogWarning("[Chill Clock] LoadAudioData failed: " + file);
-                PerfProbe.Mark("语音解码", decodeWatch);
                 Store(file, clip);
                 if (deleteAfterLoad)
                     TryDelete(path);
