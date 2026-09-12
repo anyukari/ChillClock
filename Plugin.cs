@@ -18,7 +18,7 @@ public sealed class Plugin : BaseUnityPlugin
 {
     public const string Guid = "com.chillclock.plugin";
     public const string Name = "Chill Clock";
-    public const string Version = "0.7.0";
+    public const string Version = "0.7.1";
 
     internal static ManualLogSource Log = null!;
     internal static Plugin Instance = null!;
@@ -48,6 +48,7 @@ public sealed class Plugin : BaseUnityPlugin
     private CompositeDisposable _subscriptions;
     private float _nextCoreTick;
     private float _nextGuardSweep;
+    private bool _quitting;
     private bool _pendingDistractionVoice;
     private bool _pendingTaskManagerVoice;
     private bool _pendingExitVoice;
@@ -108,6 +109,10 @@ public sealed class Plugin : BaseUnityPlugin
         _closeGuard = new CloseGuard(() => ShouldBlockGameExit());
         _escGuard = new EscKeyGuard();
         Application.wantsToQuit += OnWantsToQuit;
+        // 退出时尽早把窗口过程 / 键盘钩子还回去：这两个都是"系统随时会回调进来"的原生钩子，
+        // 拖到进程收尾阶段再解，容易变成退出时崩溃（0xc0000005）。
+        Application.quitting += OnQuitting;
+        AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
         _ui = new SettingsPageInjector(
             _store,
             () => _masterEnabled.Value,
@@ -324,6 +329,10 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void TickCoreHost()
     {
+        // 退出流程里不要再做任何周期性工作（扫窗口、收窗口、播语音都没意义了）
+        if (_quitting)
+            return;
+
         var now = UnityEngine.Time.realtimeSinceStartup;
         if (now < _nextCoreTick)
             return;
@@ -569,9 +578,41 @@ public sealed class Plugin : BaseUnityPlugin
         return false;
     }
 
+    /// <summary>
+    /// 游戏开始退出：先把我们挂上去的原生钩子全部撤掉，再做别的收尾。
+    ///
+    /// 顺序很重要 —— Application.quitting 比 OnDestroy 早，赶在 Unity 拆窗口之前
+    /// 把 SetWindowLongPtr 换回原来的窗口过程、把 WH_KEYBOARD_LL 解开，
+    /// 这样窗口被销毁时就不会回调到我们已经卸下的代码。
+    /// </summary>
+    private void OnQuitting()
+    {
+        _quitting = true;
+
+        try
+        {
+            _closeGuard?.Uninstall();
+            _escGuard?.Uninstall();
+            _uiHider?.RestoreAll();
+            Logger.LogInfo("[Chill Clock] quitting: 已撤掉窗口/键盘钩子");
+        }
+        catch (Exception e)
+        {
+            Logger.LogWarning("[Chill Clock] quit cleanup failed: " + e.Message);
+        }
+    }
+
+    private void OnProcessExit(object sender, EventArgs e)
+    {
+        OnQuitting();
+    }
+
     private void OnDestroy()
     {
         Application.wantsToQuit -= OnWantsToQuit;
+        Application.quitting -= OnQuitting;
+        AppDomain.CurrentDomain.ProcessExit -= OnProcessExit;
+        _quitting = true;
         _voiceManager?.Dispose();
         _closeGuard?.Uninstall();
         _escGuard?.Uninstall();

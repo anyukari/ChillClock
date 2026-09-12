@@ -18,21 +18,27 @@ internal sealed class CloseGuard
     private readonly Func<bool> _shouldBlock;
     private readonly Dictionary<IntPtr, IntPtr> _previousProcs = new Dictionary<IntPtr, IntPtr>();
 
-    private WindowProcDelegate _procDelegate;
+    /// <summary>
+    /// 窗口过程回调。**一旦创建就永不释放**。
+    ///
+    /// SetWindowLongPtr 记的是这个委托的函数指针，只要还有窗口没还原成功，
+    /// Windows 之后仍可能回调进来。以前 Uninstall() 里把它置成 null ——
+    /// 那些没还原成功的窗口就成了"指向已回收内存的过程"，退出时收到
+    /// WM_DESTROY 之类的消息就是 0xc0000005。
+    /// </summary>
+    private readonly WindowProcDelegate _procDelegate;
     private int _nextEnumerateTime;
 
     public CloseGuard(Func<bool> shouldBlock)
     {
         _shouldBlock = shouldBlock;
+        _procDelegate = WndProc;
     }
 
     public Action OnCloseBlocked { get; set; }
 
     public void EnsureInstalled()
     {
-        if (_procDelegate == null)
-            _procDelegate = WndProc;
-
         var now = Environment.TickCount;
         if (now < _nextEnumerateTime)
             return;
@@ -69,7 +75,6 @@ internal sealed class CloseGuard
     {
         foreach (var hwnd in new List<IntPtr>(_previousProcs.Keys))
             RestoreWindow(hwnd, remove: true);
-        _procDelegate = null;
     }
 
     private void EnsureWindowInstalled(IntPtr hwnd)
@@ -77,9 +82,7 @@ internal sealed class CloseGuard
         if (_previousProcs.ContainsKey(hwnd))
         {
             var currentProc = GetWindowLongPtr(hwnd, GwlWndProc);
-            var myProc = _procDelegate == null
-                ? IntPtr.Zero
-                : Marshal.GetFunctionPointerForDelegate(_procDelegate);
+            var myProc = Marshal.GetFunctionPointerForDelegate(_procDelegate);
             if (currentProc == myProc)
                 return;
 
@@ -117,9 +120,7 @@ internal sealed class CloseGuard
         try
         {
             var currentProc = GetWindowLongPtr(hwnd, GwlWndProc);
-            var myProc = _procDelegate == null
-                ? IntPtr.Zero
-                : Marshal.GetFunctionPointerForDelegate(_procDelegate);
+            var myProc = Marshal.GetFunctionPointerForDelegate(_procDelegate);
             if (currentProc == myProc)
                 SetWindowLongPtr(hwnd, GwlWndProc, previous);
         }

@@ -14,8 +14,22 @@ internal sealed class EscKeyGuard
     private const int WmSyskeydown = 0x0104;
     private const int VkEscape = 0x1B;
 
-    private HookProc _hookProc;
+    /// <summary>
+    /// 键盘钩子的回调委托。**一旦创建就永不释放**。
+    ///
+    /// 原因：SetWindowsHookEx 记的是这个委托的函数指针，只要钩子还挂着，
+    /// 系统随时可能回调进来。以前 Uninstall() 里把它置成 null，万一 Unhook 失败
+    /// （或者还有别的线程正在回调），指针指向的内存被回收后再被调用，
+    /// 就是 0xc0000005 —— 退出时弹 Unity 崩溃框的典型成因。
+    /// 让委托和进程同生共死，代价只有一个委托对象。
+    /// </summary>
+    private readonly HookProc _hookProc;
     private IntPtr _hookId = IntPtr.Zero;
+
+    public EscKeyGuard()
+    {
+        _hookProc = HookCallback;
+    }
 
     public void EnsureInstalled()
     {
@@ -24,7 +38,6 @@ internal sealed class EscKeyGuard
 
         try
         {
-            _hookProc = HookCallback;
             var moduleName = Process.GetCurrentProcess().MainModule?.ModuleName;
             var module = moduleName == null
                 ? IntPtr.Zero
@@ -33,14 +46,12 @@ internal sealed class EscKeyGuard
             _hookId = SetWindowsHookEx(WhKeyboardLl, _hookProc, module, 0);
             if (_hookId == IntPtr.Zero)
             {
-                _hookProc = null;
                 Plugin.Log.LogWarning("[Chill Clock] ESC keyboard hook failed, error=" +
                                       Marshal.GetLastWin32Error());
             }
         }
         catch (Exception e)
         {
-            _hookProc = null;
             Plugin.Log.LogWarning("[Chill Clock] ESC keyboard hook exception: " + e.Message);
         }
     }
@@ -52,8 +63,6 @@ internal sealed class EscKeyGuard
             UnhookWindowsHookEx(_hookId);
             _hookId = IntPtr.Zero;
         }
-
-        _hookProc = null;
     }
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
