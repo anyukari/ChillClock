@@ -18,7 +18,7 @@ public sealed class Plugin : BaseUnityPlugin
 {
     public const string Guid = "com.chillclock.plugin";
     public const string Name = "Chill Clock";
-public const string Version = "0.9.4";
+public const string Version = "0.9.5";
 
     internal static ManualLogSource Log = null!;
     internal static Plugin Instance = null!;
@@ -242,6 +242,20 @@ public const string Version = "0.9.4";
                 Logger.LogWarning("ScenarioTextMessage.StartText not found; 游戏自己的字幕可能被我们盖掉");
 
             PatchExternalPiP();
+
+            // 专注期间的 ESC：不用全局键盘钩子（那个会让键盘发粘），
+            // 改成在进程内让游戏的 Input 读不到 ESC（见 UI\EscInputPatch.cs）。
+            var inputType = typeof(UnityEngine.Input);
+            var escPatched = 0;
+            foreach (var inputMethod in new[] { "GetKeyDown", "GetKey", "GetKeyUp" })
+            {
+                var target = AccessTools.Method(inputType, inputMethod, new[] { typeof(KeyCode) });
+                if (target == null)
+                    continue;
+                _harmony.Patch(target, prefix: PatchMethod("EscInputPatch", "Prefix"));
+                escPatched++;
+            }
+            Log.LogInfo("[Chill Clock] ESC 拦截已挂 " + escPatched + " 个输入方法（进程内，无全局钩子）");
 
             var patched = _harmony.GetPatchedMethods()
                 .Select(m => m.DeclaringType?.Name + "." + m.Name)
