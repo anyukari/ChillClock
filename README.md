@@ -72,8 +72,8 @@
 
 ```
 [游戏根目录]/
-└── BepInEx/
-    └── plugins/
+    └── BepInEx/
+        └── plugins/
             └── ChillClock.dll
 ```
 
