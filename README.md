@@ -61,7 +61,7 @@
 * 运行一次游戏以生成 BepInEx 相关文件夹（能看到 `[游戏根目录]/BepInEx/plugins/`）。
 
 2. **安装 Mod**
-* 从 Release 下载最新版本的 `ChillClock.dll`。
+* 从 [Release](https://github.com/anyukari/ChillClock/releases) 下载最新版本的 `ChillClock.dll`。
 * 将 `ChillClock.dll` 放入`BepInEx/plugins/` 目录下。
 * 之前装过旧版的话，**用新文件覆盖**同一个 `ChillClock.dll` 就行；不要把两个名字不同的 dll 同时放在 `plugins/` 里（BepInEx 会认为它们是两个插件，把同一套功能加载两遍）。
 * 确保你的文件夹结构如下所示：
